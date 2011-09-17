@@ -1,6 +1,7 @@
 (ns carrit
   (:require [clojure.contrib.logging :as logging]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.contrib.string :as string])
   (:gen-class))
 ; Not idiomatic clojure; that will have to wait until I learn how to do things properly.
   
@@ -29,6 +30,8 @@ save game directory and returns a sequence of those files."
     nil))
 
 (defn extract-region-dir [files]
+  "Given a save game directory finds the region directory and extracts the
+files for that directory."
   (if (empty? files)
     nil
     (let [first-file (first files)]
@@ -37,6 +40,32 @@ save game directory and returns a sequence of those files."
           first-file
           nil)
         (recur (next files))))))
+
+(defn base-n
+  "Converts a number to the specified base, using a digit sequence. The digit
+sequence must match the base"
+  ([base digits number]
+    (let [digit-seq (if (neg? number)
+                      (cons "-" (base-n base digits (- number) '()))
+                      (base-n base digits number '()))]
+      (reduce str digit-seq)))
+  ([base digits number acc]
+    "Converts a number to the specified base, using a digit sequence and
+accumulator. The accumulator is a list containing the digits (from the right)
+so far."
+    (if (= number 0)
+      (if (empty? acc) '("0") acc)
+      (let [remainder (rem number base)]
+        (recur base
+               digits
+               (/ (- number remainder) base)
+               (cons (.substring digits remainder (inc remainder)) acc))))))
+
+; Hackety hack
+(defn base-36 [number]
+  "Converts a number to a string in base 36."
+  (base-n number "0123456789abcdefjhijklmnopqrstuvwxyz"))
+
 
 (defn read-chunk-file [file-name]
   (slurp file-name))
