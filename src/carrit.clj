@@ -69,13 +69,39 @@ files for that directory."
 (def ^{:doc "Size of chunk location data, in bytes" } CHUNK_LOCATION_SIZE 4)
 (def ^{:doc "Size of chunk timestamp data, in bytes"} CHUNK_TIMESTAMP_SIZE 4)
 (def ^{:doc "Size of the length header for chunk data, in bytes"} CHUNK_DATA_LENGTH_HEADER_SIZE 4)
+(def ^{:doc "Size of the compression type header, in bytes"} CHUNK_COMPRESSION_TYPE_SIZE 1)
 
 (defn calc-chunk-location-offset [x z]
   "Given the x, y, z coordinates, calculates the offset, in bytes, of the
 chunk location in a region file"
   (* CHUNK_LOCATION_SIZE (+ (mod x CHUNK_SIZE) (* (mod z CHUNK_SIZE) CHUNK_SIZE))))
-(defn chunk-location [location-byte-array]
-  nil)
+
+(defn chunk-num-from-byte-array [^bytes chunk-byte-array offset length]
+  "Returns a number from a big-endian chunk byte array using entries up to the
+specified length. The length of the array must be at least the specified
+length."
+  {:pre [(>= (alength chunk-byte-array) length)]}
+  (reduce + (for [i (range 0 length)]
+              (bit-shift-left #^Integer (aget chunk-byte-array i) (- length i)))))
+
+; TODO: probably not needed, call underlying function directly
+(defn chunk-location [^bytes location-byte-array]
+  "Returns a chunk location from the specified location byte array. The array
+must be at least the size of a location."
+  (chunk-num-from-byte-array location-byte-array 0 CHUNK_LOCATION_SIZE))
+
+; TODO: probably not needed, call underlying function directly
+(defn chunk-timestamp [^bytes timestamp-byte-array]
+  "Returns a chunk location from the specified timestamp byte array. The array
+must be at least the size of a timestamp."
+  (chunk-num-from-byte-array timestamp-byte-array 0 CHUNK_TIMESTAMP_SIZE))
+
+(defn chunk-length-byte-array [^bytes chunk-length-byte-array]
+  "Returns the chunk length from teh specified chunk header array. The array
+must be at least the size of a chunk length header."
+  (chunk-num-from-byte-array chunk-length-byte-array 0 CHUNK_DATA_LENGTH_HEADER_SIZE))
+
+
 
 (defn read-chunk-file [file-name]
   (slurp file-name))
