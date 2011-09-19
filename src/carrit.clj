@@ -1,5 +1,7 @@
 (ns carrit
   (:require [clojure.contrib.logging :as logging]
+            [clojure.contrib.duck-streams :as duck-streams]
+            [clojure.contrib.generic.math-functions :as math]
             [clojure.contrib.string :as string])
   (:import [java.io File])
   (:gen-class))
@@ -65,16 +67,24 @@ files for that directory."
           nil)
         (recur (next files))))))
 
-(def ^{:doc "Size of a chunk, in blocks"} CHUNK_SIZE 32)
+(def ^{:doc "Bitshift for x chunk to determine file name"} CHUNK_X_SHIFT 5)
+(def
+  ^{:doc "Number of chunks per region along the x axis. Offset multiplier for x location for chunk location headers"}
+   CHUNK_X_MULTIPLIER (math/pow 2 CHUNK_X_SHIFT))
+(def ^{:doc "Bitshift for z chunk to determine file name"} CHUNK_Z_SHIFT 5)
+(def
+  ^{:doc "Number of chunks per region along the z axis. Offset multiplier for z location for chunk location headers"}
+   CHUNK_Z_MULTIPLIER (math/pow 2 CHUNK_Z_SHIFT))
 (def ^{:doc "Size of chunk location data, in bytes" } CHUNK_LOCATION_SIZE 4)
 (def ^{:doc "Size of chunk timestamp data, in bytes"} CHUNK_TIMESTAMP_SIZE 4)
 (def ^{:doc "Size of the length header for chunk data, in bytes"} CHUNK_DATA_LENGTH_HEADER_SIZE 4)
 (def ^{:doc "Size of the compression type header, in bytes"} CHUNK_COMPRESSION_TYPE_SIZE 1)
+(def ^{:doc "Number of chunks in a file"} CHUNKS_PER_REGION (* CHUNK_X_MULTIPLIER CHUNK_Z_MULTIPLIER))
 
-(defn calc-chunk-location-offset [x z]
+(defn calc-chunk-header-offset [header-offset x z]
   "Given the x, y, z coordinates, calculates the offset, in bytes, of the
-chunk location in a region file"
-  (* CHUNK_LOCATION_SIZE (+ (mod x CHUNK_SIZE) (* (mod z CHUNK_SIZE) CHUNK_SIZE))))
+chunk header in a region file"
+  (* header-offset (+ (mod x CHUNK_X_MULTIPLIER) (* (mod z CHUNK_Z_MULTIPLIER) CHUNK_X_MULTIPLIER))))
 
 (defn chunk-num-from-byte-array [^bytes chunk-byte-array offset length]
   "Returns a number from a big-endian chunk byte array using entries up to the
@@ -101,16 +111,18 @@ must be at least the size of a timestamp."
 must be at least the size of a chunk length header."
   (chunk-num-from-byte-array chunk-length-byte-array 0 CHUNK_DATA_LENGTH_HEADER_SIZE))
 
+(defn read-chunk-file [file-descriptor]
+  (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))]
+    ; chunk location:
+    (chunk-num-from-byte-array chunk-byte-array 0 CHUNK_LOCATION_SIZE))
+  nil)
 
-
-(defn read-chunk-file [file-name]
-  (slurp file-name))
-
-(defn create-file-name [x y z]
+(defn create-file-descriptor [x y z]
   "Generates a region file name for the specified coordinates."
-  (let [[xChunk yChunk zChunk]
-        (map #(with-precision 1 :rounding FLOOR (/ %1 CHUNK_SIZE)) [x y z])]
-    format "r.%d.%d.mcr" [xChunk zChunk]))
+  ; Region determined by right bit shifting x and z
+  (let [shift-map {x CHUNK_X_SHIFT, z CHUNK_Z_SHIFT} [xRegion zRegion]
+        (map #(bit-shift-right % (shift-map %)) [x z])]
+    {:filename (format "r.%d.%d.mcr" xRegion zRegion), :xRegion xRegion, :zRegion zRegion}))
 
 (defn -main [& options]
   (if-let [save-dir-files (verify-save-dir (File. MINECRAFT_DIR))]
