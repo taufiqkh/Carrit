@@ -14,31 +14,6 @@
 ; to adding options
 (def MINECRAFT_DIR "Whole New World")
 
-(defn base-n
-  "Converts a number to the specified base, using a digit sequence. The digit
-sequence must match the base"
-  ([base digits number]
-    (let [digit-seq (if (neg? number)
-                      (cons "-" (base-n base digits (- number) '()))
-                      (base-n base digits number '()))]
-      (reduce str digit-seq)))
-  ([base digits number acc]
-    "Converts a number to the specified base, using a digit sequence and
-accumulator. The accumulator is a list containing the digits (from the right)
-so far."
-    (if (= number 0)
-      (if (empty? acc) '("0") acc)
-      (let [remainder (rem number base)]
-        (recur base
-               digits
-               (/ (- number remainder) base)
-               (cons (string/get digits remainder) acc))))))
-
-; Hackety hack
-(defn base-36 [number]
-  "Converts a number to a string in base 36."
-  (base-n number "0123456789abcdefjhijklmnopqrstuvwxyz"))
-
 (defn info
   "Logs the specified string using a standard logger"
   [log-message parameters]
@@ -107,14 +82,24 @@ must be at least the size of a timestamp."
   (chunk-num-from-byte-array timestamp-byte-array 0 CHUNK_TIMESTAMP_SIZE))
 
 (defn chunk-length-byte-array [^bytes chunk-length-byte-array]
-  "Returns the chunk length from teh specified chunk header array. The array
+  "Returns the chunk length from the specified chunk header array. The array
 must be at least the size of a chunk length header."
   (chunk-num-from-byte-array chunk-length-byte-array 0 CHUNK_DATA_LENGTH_HEADER_SIZE))
 
+(defn chunk-range [region shift]
+  "Derives a chunk coordinate range from a region"
+  (range (bit-shift-left region shift) (bit-shift-left (inc region) shift)))
+
 (defn read-chunk-file [file-descriptor]
   (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))]
-    ; chunk location:
-    (chunk-num-from-byte-array chunk-byte-array 0 CHUNK_LOCATION_SIZE))
+    ; chunk locations:
+    (loop [location-map {}
+           read-from 0
+           x (chunk-range (:xRegion file-descriptor) CHUNK_X_SHIFT)
+           z (chunk-range (:zRegion file-descriptor) CHUNK_Z_SHIFT)]
+      (chunk-num-from-byte-array chunk-byte-array read-from CHUNK_LOCATION_SIZE)
+      )
+    )
   nil)
 
 (defn create-file-descriptor [x y z]
