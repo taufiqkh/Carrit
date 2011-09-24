@@ -1,9 +1,11 @@
-(ns carrit
+(ns carrit.core
   (:require [clojure.contrib.logging :as logging]
             [clojure.contrib.duck-streams :as duck-streams]
             [clojure.contrib.generic.math-functions :as math]
             [clojure.contrib.string :as string])
-  (:import [java.io File])
+  (:import java.io.File
+           java.util.Arrays
+           java.util.zip.Inflater)
   (:gen-class))
 (set! *warn-on-reflection* true)
 ; Not idiomatic clojure; that will have to wait until I learn how to do things properly.
@@ -61,19 +63,14 @@ files for that directory."
 chunk header in a region file"
   (* header-offset (+ (mod x CHUNK_X_MULTIPLIER) (* (mod z CHUNK_Z_MULTIPLIER) CHUNK_X_MULTIPLIER))))
 
-(defn chunk-num-from-byte-array [^bytes chunk-byte-array offset length]
+(defn chunk-num-from-byte-array [^bytes chunk-byte-array start-index length]
   "Returns a number from a big-endian chunk byte array using entries up to the
 specified length. The length of the array must be at least the specified
 length."
-  {:pre [(>= (alength chunk-byte-array) length)]}
-  (reduce + (for [i (range 0 length)]
-              (bit-shift-left #^Integer (aget chunk-byte-array i) (- length i)))))
-
-; TODO: probably not needed, call underlying function directly
-(defn chunk-location [^bytes location-byte-array]
-  "Returns a chunk location from the specified location byte array. The array
-must be at least the size of a location."
-  (chunk-num-from-byte-array location-byte-array 0 CHUNK_LOCATION_SIZE))
+  {:pre [(>= (alength chunk-byte-array) (dec (+ start-index length)))]}
+  (let [end-index (dec (+ start-index length))] 
+    (reduce + (for [i (range start-index end-index)]
+                (bit-shift-left #^Integer (aget chunk-byte-array i) (- end-index i))))))
 
 ; TODO: probably not needed, call underlying function directly
 (defn chunk-timestamp [^bytes timestamp-byte-array]
@@ -90,17 +87,64 @@ must be at least the size of a chunk length header."
   "Derives a chunk coordinate range from a region"
   (range (bit-shift-left region shift) (bit-shift-left (inc region) shift)))
 
+(defn region-loc-keys [x-region z-region]
+  "Creates a set of location keys of [x, z] for all x, z in a region"
+  (let [x-range (chunk-range x-region CHUNK_X_SHIFT)
+        z-range (chunk-range z-region CHUNK_Z_SHIFT)]
+    ;loc-key (reduce conj (map (fn [x inner-z] (map (fn [z] (vector x z)) inner-z)) x-range (repeat z-range)))]
+    ; Need to rewrite for clarity:
+    (loop [x-rem x-range
+           loc-key-acc []]
+      (if (empty? x-rem)
+        loc-key-acc
+        (recur (rest x-rem)
+          (loop [x (first x-rem)
+                 z-rem z-range
+                 inner-loc-key-acc loc-key-acc]
+            (if (empty? z-rem)
+              inner-loc-key-acc
+              (recur x (next z-rem) (conj inner-loc-key-acc [(first x-rem) (first z-rem)])))))))))
+
 (defn read-chunk-file [file-descriptor]
-  (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))]
-    ; chunk locations:
-    (loop [location-map {}
+  "Reads a chunk file. Contains side-effects"
+  (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))
+        loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))]
+      (loop [location-map {}
            read-from 0
-           x (chunk-range (:xRegion file-descriptor) CHUNK_X_SHIFT)
-           z (chunk-range (:zRegion file-descriptor) CHUNK_Z_SHIFT)]
-      (chunk-num-from-byte-array chunk-byte-array read-from CHUNK_LOCATION_SIZE)
-      )
-    )
-  nil)
+           loc-keys-rem loc-keys]
+        (if (empty? loc-keys-rem)
+          location-map
+          (recur (assoc location-map
+                        (peek loc-keys-rem)
+                        (chunk-num-from-byte-array chunk-byte-array read-from CHUNK_LOCATION_SIZE))
+                 (+ read-from CHUNK_LOCATION_SIZE)
+                 (pop loc-keys-rem))))))
+
+(defn expand-arrays [arrays ^Integer length]
+  "For a given sequence of arrays, returns a single array of the specified
+length, containing the contents of the arrays up to that length."
+  {:pre (and (> length 0) (<= length (reduce + 0 (map #(alength ^bytes %) arrays))))}
+  (let [^bytes first-array (first arrays)
+        ^bytes destination (Arrays/copyOf first-array length)]
+    (loop [arrays-rem (rest arrays) offset (alength first-array) length-remaining (- length offset)]
+      (if (empty? arrays-rem)
+        destination
+        (let [^bytes next-array (first arrays-rem) next-length (min (alength next-array) length-remaining)]
+          (System/arraycopy next-array 0 destination offset next-length)
+          (recur (rest arrays-rem) (+ offset (alength next-array)) (- length-remaining next-length)))))))
+
+(def ALLOCATION-BLOCK 4096)
+(defn read-chunk-data [chunk-byte-array offset length]
+  "Reads chunk data from the specified array, using the given offset and length"
+  (let [inflater (Inflater.)]
+    (.setInput inflater chunk-byte-array offset length)
+    (loop [arrays []]
+      (let [next-byte-array (byte-array ALLOCATION-BLOCK)]
+        (.inflate inflater next-byte-array offset ALLOCATION-BLOCK)
+        (if (.finished inflater)
+          (let [bytes-written (.getBytesWritten inflater)]
+            {:length bytes-written :data (expand-arrays arrays bytes-written)})
+          (recur (conj arrays next-byte-array)))))))
 
 (defn create-file-descriptor [x y z]
   "Generates a region file name for the specified coordinates."

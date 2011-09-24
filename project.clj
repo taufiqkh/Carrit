@@ -6,4 +6,4 @@
                                               javax.jms/jms
                                               com.sun.jdmk/jmxtools
                                               com.sun.jmx/jmxri]]]
-  :main carrit)
+  :main carrit.core)
