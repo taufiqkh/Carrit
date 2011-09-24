@@ -19,7 +19,7 @@
 (defn info
   "Logs the specified string using a standard logger"
   [log-message & parameters]
-  (logging/info (format log-message parameters)))
+  (logging/info (apply format log-message parameters)))
 
 (defn verify-save-dir [^File directory]
   "Verifies that a given directory contains the files/directories expected in a
@@ -49,30 +49,41 @@ files for that directory, mapped by file name."
 (def ^{:doc "Bitshift for x chunk to determine file name"} CHUNK_X_SHIFT 5)
 (def
   ^{:doc "Number of chunks per region along the x axis. Offset multiplier for x location for chunk location headers"}
-   CHUNK_X_MULTIPLIER (math/pow 2 CHUNK_X_SHIFT))
+   CHUNK_X_MULTIPLIER (int (math/pow 2 CHUNK_X_SHIFT)))
 (def ^{:doc "Bitshift for z chunk to determine file name"} CHUNK_Z_SHIFT 5)
 (def
   ^{:doc "Number of chunks per region along the z axis. Offset multiplier for z location for chunk location headers"}
-   CHUNK_Z_MULTIPLIER (math/pow 2 CHUNK_Z_SHIFT))
-(def ^{:doc "Size of chunk location data, in bytes" } CHUNK_LOCATION_SIZE 4)
+   CHUNK_Z_MULTIPLIER (int (math/pow 2 CHUNK_Z_SHIFT)))
+(def ^{:doc "Size of chunk location offset, in bytes"} CHUNK_LOCATION_OFFSET_SIZE 3)
+(def ^{:doc "Size of chunk location sector, in bytes"} CHUNK_LOCATION_SECTOR_SIZE 1)
+(def ^{:doc "Size of chunk location data, in bytes" }
+      CHUNK_LOCATION_SIZE
+  (+ CHUNK_LOCATION_OFFSET_SIZE CHUNK_LOCATION_SECTOR_SIZE))
+(def ^{:doc "Size of a chunk sector in bytes"} CHUNK_SECTOR_SIZE 4096)
 (def ^{:doc "Size of chunk timestamp data, in bytes"} CHUNK_TIMESTAMP_SIZE 4)
 (def ^{:doc "Size of the length header for chunk data, in bytes"} CHUNK_DATA_LENGTH_HEADER_SIZE 4)
 (def ^{:doc "Size of the compression type header, in bytes"} CHUNK_COMPRESSION_TYPE_SIZE 1)
 (def ^{:doc "Number of chunks in a file"} CHUNKS_PER_REGION (* CHUNK_X_MULTIPLIER CHUNK_Z_MULTIPLIER))
 
-(defn calc-chunk-header-offset [header-offset x z]
+(defn calc-chunk-header-offset [header-size x z]
   "Given the x, y, z coordinates, calculates the offset, in bytes, of the
 chunk header in a region file"
-  (* header-offset (+ (mod x CHUNK_X_MULTIPLIER) (* (mod z CHUNK_Z_MULTIPLIER) CHUNK_X_MULTIPLIER))))
+  (* header-size (+ (mod x CHUNK_X_MULTIPLIER) (* (mod z CHUNK_Z_MULTIPLIER) CHUNK_X_MULTIPLIER))))
 
+; TODO: If possible, change to macro
+(defn unsigned-byte-to-num [bval]
+  "Converts a byte to a number using unsigned arithmetic"
+  (if (< bval 0) (+ bval 256) bval))
+  
 (defn chunk-num-from-byte-array [^bytes chunk-byte-array start-index length]
   "Returns a number from a big-endian chunk byte array using entries up to the
 specified length. The length of the array must be at least the specified
 length."
   {:pre [(>= (alength chunk-byte-array) (dec (+ start-index length)))]}
   (let [end-index (dec (+ start-index length))] 
-    (reduce + (for [i (range start-index end-index)]
-                (bit-shift-left #^Integer (aget chunk-byte-array i) (- end-index i))))))
+    ; Bit shift left by byte size for each digit until we reach the end
+    (reduce + (for [i (range start-index (inc end-index))]
+                (bit-shift-left (unsigned-byte-to-num (aget chunk-byte-array i)) (* (- end-index i) 8))))))
 
 ; TODO: probably not needed, call underlying function directly
 (defn chunk-timestamp [^bytes timestamp-byte-array]
@@ -107,25 +118,10 @@ must be at least the size of a chunk length header."
               inner-loc-key-acc
               (recur x (next z-rem) (conj inner-loc-key-acc [(first x-rem) (first z-rem)])))))))))
 
-(defn read-region-file [file-descriptor directory]
-  "Reads a region file. Contains side-effects"
-  (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))
-        loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))]
-      (loop [location-map {}
-           read-from 0
-           loc-keys-rem loc-keys]
-        (if (empty? loc-keys-rem)
-          location-map
-          (recur (assoc location-map
-                        (peek loc-keys-rem)
-                        (chunk-num-from-byte-array chunk-byte-array read-from CHUNK_LOCATION_SIZE))
-                 (+ read-from CHUNK_LOCATION_SIZE)
-                 (pop loc-keys-rem))))))
-
 (defn expand-arrays [arrays ^Integer length]
   "For a given sequence of arrays, returns a single array of the specified
 length, containing the contents of the arrays up to that length."
-  {:pre (and (> length 0) (<= length (reduce + 0 (map #(alength ^bytes %) arrays))))}
+  {:pre [(> length 0) (<= length (reduce + 0 (map #(alength ^bytes %) arrays)))]}
   (let [^bytes first-array (first arrays)
         ^bytes destination (Arrays/copyOf first-array length)]
     (loop [arrays-rem (rest arrays) offset (alength first-array) length-remaining (- length offset)]
@@ -135,18 +131,68 @@ length, containing the contents of the arrays up to that length."
           (System/arraycopy next-array 0 destination offset next-length)
           (recur (rest arrays-rem) (+ offset (alength next-array)) (- length-remaining next-length)))))))
 
-(def ALLOCATION-BLOCK 4096)
-(defn read-chunk-data [chunk-byte-array offset length]
+; TODO: Fix infinite loop in case inflator doesn't think it's finished once
+; it's reached compressed length
+(defn inflate-chunk-data [chunk-byte-array offset compressed-length alloc-length]
   "Reads chunk data from the specified array, using the given offset and length"
-  (let [inflater (Inflater.)]
-    (.setInput inflater chunk-byte-array offset length)
-    (loop [arrays []]
-      (let [next-byte-array (byte-array ALLOCATION-BLOCK)]
-        (.inflate inflater next-byte-array offset ALLOCATION-BLOCK)
-        (if (.finished inflater)
-          (let [bytes-written (.getBytesWritten inflater)]
-            {:length bytes-written :data (expand-arrays arrays bytes-written)})
-          (recur (conj arrays next-byte-array)))))))
+  (info "Inflating chunk data offset %d compressed-length %d alloc-length %d"
+        offset compressed-length alloc-length)
+  (if (<= compressed-length 0)
+    {:length 0 :data nil}
+    (let [inflater (Inflater.)]
+      (.setInput inflater chunk-byte-array offset compressed-length)
+      (loop [arrays []]
+        (let [next-byte-array (byte-array CHUNK_SECTOR_SIZE)]
+          (.inflate inflater next-byte-array 0 CHUNK_SECTOR_SIZE)
+          (info "Inflator %d: Read: %d Written %d Finished %b" offset (.getBytesRead inflater) (.getBytesWritten inflater) (.finished inflater))
+          (if (.finished inflater)
+            (let [bytes-written (.getBytesWritten inflater)]
+              {:length bytes-written :data (expand-arrays arrays bytes-written)})
+            (recur (conj arrays next-byte-array))))))))
+
+(defn read-chunk-data [chunk-byte-array offset alloc-length]
+  {:pre [(>= offset 0) (> alloc-length 0)]}
+  "Reads the chunk header and data at a specified offset. Contains side effects."
+  (let [compressed-length (chunk-num-from-byte-array chunk-byte-array offset CHUNK_DATA_LENGTH_HEADER_SIZE)
+        compression-type (chunk-num-from-byte-array chunk-byte-array offset CHUNK_COMPRESSION_TYPE_SIZE)
+        data-offset (+ offset CHUNK_DATA_LENGTH_HEADER_SIZE CHUNK_COMPRESSION_TYPE_SIZE)]
+    {:compressed-length compressed-length
+     :compression-type compression-type
+     :data (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)}))
+
+(defn read-chunk [chunk-byte-array location-offset timestamp-offset]
+  "Reads chunk data from the specified offsets"
+  (let [data-location (* (chunk-num-from-byte-array chunk-byte-array location-offset CHUNK_LOCATION_OFFSET_SIZE)
+                         CHUNK_SECTOR_SIZE)
+        sectors (chunk-num-from-byte-array chunk-byte-array
+                                           (+ location-offset CHUNK_LOCATION_OFFSET_SIZE)
+                                           CHUNK_LOCATION_SECTOR_SIZE)
+        chunk-map {:data-offset data-location
+                   :sectors sectors
+                   :timestamp (chunk-num-from-byte-array chunk-byte-array timestamp-offset CHUNK_TIMESTAMP_SIZE)}]
+    (if (zero? data-location)
+      chunk-map
+      (let []
+        (info "Offset: %d Sectors: %d Timestamp: %d" data-location sectors (chunk-map :timestamp))
+        (merge chunk-map (read-chunk-data chunk-byte-array data-location (* sectors CHUNK_SECTOR_SIZE)))))))
+
+(defn read-region-file [file-descriptor file]
+  "Reads a region file. Contains side-effects"
+  (let [chunk-byte-array (duck-streams/to-byte-array file)
+        loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))
+        timestamp-header-offset (* CHUNKS_PER_REGION CHUNK_LOCATION_SIZE)]
+      (loop [region-map {}
+           location-read-from 0
+           timestamp-read-from (* CHUNKS_PER_REGION CHUNK_LOCATION_SIZE)
+           loc-keys-rem loc-keys]
+        (if (empty? loc-keys-rem)
+          region-map
+          (let [[x z] (peek loc-keys-rem)]
+            (recur (assoc region-map [x z]
+                          (read-chunk chunk-byte-array location-read-from timestamp-read-from))
+                   (calc-chunk-header-offset CHUNK_LOCATION_SIZE x z)
+                   (+ timestamp-header-offset (calc-chunk-header-offset CHUNK_TIMESTAMP_SIZE x z))
+                   (pop loc-keys-rem)))))))
 
 (defn create-file-descriptor [x y z]
   "Generates a region file name for the specified coordinates."
@@ -156,10 +202,16 @@ length, containing the contents of the arrays up to that length."
         [xRegion zRegion] (map #(bit-shift-right (val-map %) (shift-map %)) [:x :z])]
     {:filename (format "r.%d.%d.mcr" xRegion zRegion), :xRegion xRegion, :zRegion zRegion}))
 
-(defn -main [& options]
-  (if-let [save-dir-files (verify-save-dir (File. MINECRAFT_DIR))]
+(defn load-save-dir [^String dirname]
+  (if-let [save-dir-files (verify-save-dir (File. dirname))]
     (if-let [region-dir-files (map-region-dir save-dir-files)]
-      (let [origin-descriptor (create-file-descriptor 0 0 0)]
-        (println region-dir-files))
-      (info "Couldn't map region directory files"))
+      {:save-dir save-dir-files
+       :region-map region-dir-files}
+      (info "Couldn't map region directory files for %s." dirname))
     nil))
+
+(defn -main [& options]
+  (if-let [save-dir (load-save-dir MINECRAFT_DIR)]
+    (let [origin-descriptor (create-file-descriptor 0 0 0)]
+      (read-region-file origin-descriptor ((save-dir :region-map) (origin-descriptor :filename)))))
+  nil)
