@@ -8,6 +8,6 @@
 
 (deftest test-expand-arrays
   (let [arrays [(vec-as-byte-array [1 2 3]) (vec-as-byte-array [4 5 6 7])]
-        expanded-array (core/expand-arrays arrays 5)]
+        ^bytes expanded-array (core/expand-arrays arrays 5)]
     (is (= 5 (count expanded-array)))
-    (is (Arrays/equals expanded-array (vec-as-byte-array [1 2 3 4 5])))))
+    (is (Arrays/equals expanded-array ^bytes (vec-as-byte-array [1 2 3 4 5])))))

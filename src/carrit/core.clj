@@ -18,7 +18,7 @@
 
 (defn info
   "Logs the specified string using a standard logger"
-  [log-message parameters]
+  [log-message & parameters]
   (logging/info (format log-message parameters)))
 
 (defn verify-save-dir [^File directory]
@@ -32,15 +32,17 @@ save game directory and returns a sequence of those files."
         nil))
     nil))
 
-(defn extract-region-dir [files]
+(defn map-region-dir [files]
   "Given a save game directory finds the region directory and extracts the
-files for that directory."
+files for that directory, mapped by file name."
   (if (empty? files)
-    nil
+    (info "Files exhausted before region directory found.")
     (let [^File first-file (first files)]
-      (if (= "region" first-file)
+      (if (= "region" (.getName first-file))
         (if (.isDirectory first-file)
-          first-file
+          (let [region-file-seq (file-seq first-file)
+                region-file-names (map #(.getName ^File %) region-file-seq)]
+            (zipmap region-file-names region-file-seq))
           nil)
         (recur (next files))))))
 
@@ -105,8 +107,8 @@ must be at least the size of a chunk length header."
               inner-loc-key-acc
               (recur x (next z-rem) (conj inner-loc-key-acc [(first x-rem) (first z-rem)])))))))))
 
-(defn read-chunk-file [file-descriptor]
-  "Reads a chunk file. Contains side-effects"
+(defn read-region-file [file-descriptor directory]
+  "Reads a region file. Contains side-effects"
   (let [chunk-byte-array (duck-streams/to-byte-array (File. (:file-name file-descriptor)))
         loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))]
       (loop [location-map {}
@@ -149,13 +151,15 @@ length, containing the contents of the arrays up to that length."
 (defn create-file-descriptor [x y z]
   "Generates a region file name for the specified coordinates."
   ; Region determined by right bit shifting x and z
-  (let [shift-map {x CHUNK_X_SHIFT, z CHUNK_Z_SHIFT} [xRegion zRegion]
-        (map #(bit-shift-right % (shift-map %)) [x z])]
+  (let [shift-map {:x CHUNK_X_SHIFT, :z CHUNK_Z_SHIFT}
+        val-map {:x x, :z z}
+        [xRegion zRegion] (map #(bit-shift-right (val-map %) (shift-map %)) [:x :z])]
     {:filename (format "r.%d.%d.mcr" xRegion zRegion), :xRegion xRegion, :zRegion zRegion}))
 
 (defn -main [& options]
   (if-let [save-dir-files (verify-save-dir (File. MINECRAFT_DIR))]
-    (if-let [region-dir-files (extract-region-dir save-dir-files)]
-      nil
-      nil)
+    (if-let [region-dir-files (map-region-dir save-dir-files)]
+      (let [origin-descriptor (create-file-descriptor 0 0 0)]
+        (println region-dir-files))
+      (info "Couldn't map region directory files"))
     nil))
