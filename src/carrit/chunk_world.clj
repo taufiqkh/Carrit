@@ -1,11 +1,13 @@
 (ns carrit.chunk-world
+  "Manages chunks in a world map."
   (:use carrit.region-file)
   (:gen-class
     :constructors {[String] []}
     :init init
-    :methods [[hasChunk [] boolean]
+    :methods [[hasChunk [int int int] boolean]
               [getChunk[int int int] void]]
     ))
+; Java interoperable class for exposing chunk API
 
 (def MINECRAFT_DIR "Whole New World")
 
@@ -18,6 +20,6 @@
 (defn -main [& options]
   (-init MINECRAFT_DIR))
 
-(defn -hasChunk [] false)
+(defn -hasChunk [x y z] false)
 
 (defn -getChunk [x y z] nil)

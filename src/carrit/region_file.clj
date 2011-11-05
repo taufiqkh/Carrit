@@ -21,13 +21,14 @@
 (defn verify-save-dir [^File directory]
   "Verifies that a given directory contains the files/directories expected in a
 save game directory and returns a sequence of those files."
-  (info "Verifying directory %s" (.getPath directory))
-  (if (.isDirectory directory)
-    (let [files (file-seq directory) filenames (set (map (fn [^File file] (.getName file)) files))]
-      (if (clojure.set/subset? EXPECTED_SAVE_ENTRIES filenames)
-        files
-        nil))
-    nil))
+  (io!
+    (info "Verifying directory %s" (.getPath directory))
+    (if (.isDirectory directory)
+      (let [files (file-seq directory) filenames (set (map (fn [^File file] (.getName file)) files))]
+        (if (clojure.set/subset? EXPECTED_SAVE_ENTRIES filenames)
+          files
+          nil))
+      nil)))
 
 (defn map-region-dir [files]
   "Given a save game directory finds the region directory and extracts the
@@ -35,13 +36,14 @@ files for that directory, mapped by file name."
   (if (empty? files)
     (info "Files exhausted before region directory found.")
     (let [^File first-file (first files)]
-      (if (= "region" (.getName first-file))
-        (if (.isDirectory first-file)
-          (let [region-file-seq (file-seq first-file)
-                region-file-names (map #(.getName ^File %) region-file-seq)]
-            (zipmap region-file-names region-file-seq))
-          nil)
-        (recur (next files))))))
+      (io!
+        (if (= "region" (.getName first-file))
+          (if (.isDirectory first-file)
+            (let [region-file-seq (file-seq first-file)
+                  region-file-names (map #(.getName ^File %) region-file-seq)]
+              (zipmap region-file-names region-file-seq))
+            nil)
+          (recur (next files)))))))
 
 (def ^{:doc "Bitshift for x chunk to determine file name"} CHUNK_X_SHIFT 5)
 (def
@@ -160,7 +162,7 @@ length, containing the contents of the arrays up to that length."
 
 (defn read-region-file [file-descriptor file]
   "Reads a region file. Contains side-effects"
-  (let [chunk-byte-array (duck-streams/to-byte-array file)
+  (let [chunk-byte-array (io! (duck-streams/to-byte-array file))
         loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))
         timestamp-header-offset (* CHUNKS_PER_REGION CHUNK_LOCATION_SIZE)]
       (loop [region-map {}
