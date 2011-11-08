@@ -19,7 +19,7 @@ public interface ChunkWorld {
      * @return True if the chunk has been generated and is currently under
      *         management, otherwise false.
      */
-    boolean hasChunk(int x, int z);
+    boolean hasChunk(int x, int y, int z);
 
     /**
      * Gets the chunk at the specified coordinates, if it exists in management.
@@ -33,7 +33,7 @@ public interface ChunkWorld {
      * @return The chunk at the specified coordinates, or null if the chunk does
      *         not yet exist under management.
      */
-    int getChunk(int x, int z);
+    Chunk getChunk(int x, int y, int z);
 
     /**
      * @return Number of blocks in each chunk along the X axis.

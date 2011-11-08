@@ -64,6 +64,11 @@ public interface Chunk {
     int getXPos();
 
     /**
+     * @return Y position of the chunk.
+     */
+    int getYPos();
+
+    /**
      * @return Z position of the chunk.
      */
     int getZPos();
