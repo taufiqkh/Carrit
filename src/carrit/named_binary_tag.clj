@@ -1,6 +1,7 @@
 (ns carrit.named-binary-tag
   "Named Binary Tag format functions"
-  (:use carrit.byte-convert))
+  (:use carrit.byte-convert)
+  (:import java.util.Arrays))
 
 (set! *warn-on-reflection* true)
 
@@ -23,18 +24,14 @@
 
 (defmulti nbt-from-byte-array type)
 
-(defn conj-next-utf-8-char [^bytes chunk-bytes idx byte-vec]
-  (let [next-byte (aget chunk-bytes idx) new-vec (conj byte-vec next-byte)]
-    (if (= (bit-and (unsigned-byte-to-num next-byte) 0x80) 0x80)
-      (recur chunk-bytes (inc idx) new-vec)
-      new-vec)))
+; TODO: Better way to do this?
+(defn copy-from-byte-array [^bytes chunk-bytes ^Integer idx length]
+  "Copies UTF-8 characters from a byte array and returns them as a string"
+  (Arrays/copyOfRange chunk-bytes idx #^Integer (+ idx length)))
 
-; TODO: Are there existing functions for this?
-(defn byte-array-to-vector [^bytes chunk-bytes idx chars-remaining byte-vec]
-  "Reads chars-remaining UTF-8 characters from a byte array and returns them as a vector"
-  (if (zero? chars-remaining)
-    byte-vec
-    (recur chunk-bytes (inc idx) (dec chars-remaining) (conj-next-utf-8-char chunk-bytes idx byte-vec))))
+(defn byte-array-utf-8 [^bytes chunk-bytes idx code-points]
+  (let [^bytes dest (copy-from-byte-array chunk-bytes idx code-points)]
+    (String. dest #^String *utf-8*)))
 
 (defmethod nbt-from-byte-array *string* [^bytes chunk-bytes idx]
   (let [length (num-from-byte-array idx *length-short*)]
