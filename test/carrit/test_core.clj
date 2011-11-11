@@ -20,8 +20,12 @@
   (is (= 2560 (num-from-byte-array (vec-as-byte-array [0 0xa 0]) 0 3)))
   (is (= 2728 (num-from-byte-array (vec-as-byte-array [0 0xa (unsigned-byte 0xa8)]) 0 3))))
 
+(defn reconstruct-utf-8 [string]
+  (String. (byte-array (byte-array-to-vector (.getBytes string) 0 (.length string) [])) "UTF-8"))
+
 (deftest test-str-from-byte-array
   "String from a byte array"
   (let [test-string "This is a string"]
-    (is (= test-string
-           (String. (byte-array (byte-array-to-vector (.getBytes test-string) 0 (.length test-string) [])) "UTF-8")))))
+    (is (= test-string (reconstruct-utf-8 test-string))))
+  (let [test-string "κόσμε"]
+    (is (= test-string (reconstruct-utf-8 test-string)))))
