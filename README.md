@@ -11,7 +11,10 @@ carrit requires log4j to be installed.
 
 Development
 -----------
-Pull requests are not currently being accepted, as the design and direction has not yet been decided.
+Feature pull requests are not currently being accepted, as the design and
+direction has not yet been decided. Bug fixes and code refactoring may be
+considered - also happy for people to tell me a section of code is bad, as
+long as it's accompanied by tests and/or explanations.
 
 Use
 ---
