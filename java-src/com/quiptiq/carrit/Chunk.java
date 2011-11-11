@@ -4,26 +4,26 @@ import java.util.List;
 
 /**
  * Represents a chunk in a map.
- *
+ * 
  * NOTE: This is a temporary interface, until associated types have been written
  * for better representing block information.
- *
+ * 
  * Block information is arranged such that:
- *
+ * 
  * <pre>
  * BlockID = Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]
  * </pre>
- *
+ * 
  * @author Taufiq Hoven
  */
 public interface Chunk {
     /**
-     * @return  Ids of the blocks in this chunk.
+     * @return Ids of the blocks in this chunk.
      */
     byte[] getBlockIds();
 
     /**
-     * @return  Ancillary data for the blocks in this chunk, 4 bits per block.
+     * @return Ancillary data for the blocks in this chunk, 4 bits per block.
      */
     byte[] getBlockData();
 
@@ -38,23 +38,38 @@ public interface Chunk {
     byte[] getBlockLight();
 
     /**
+     * Prepares a ChunkBlock from the data at the specified coordinates, which
+     * must exist within this chunk. If this chunk does not contain the
+     * specified coordinates, returns null.
+     * 
+     * @param x
+     *            X coordinate
+     * @param y
+     *            Y coordinate
+     * @param z
+     *            Z coordinate
+     * @return ChunkBlock with the data from the specified coordinates.
+     */
+    ChunkBlock getChunkBlock(int x, int y, int z);
+
+    /**
      * @return The lowest level in each column in where the light from the sky
      *         is at full strength. This is arranged Z, X.
      */
     byte[] getHeightMap();
 
     /**
-     * @return  Entities in the chunk.
+     * @return Entities in the chunk.
      */
     List<Object> getEntitities();
 
     /**
-     * @return  Tile entities in the chunk.
+     * @return Tile entities in the chunk.
      */
     List<Object> getTileEntities();
 
     /**
-     * @return  Tick when the chunk was last saved.
+     * @return Tick when the chunk was last saved.
      */
     long getLastUpdate();
 
@@ -81,7 +96,8 @@ public interface Chunk {
     boolean isTerrainPopulated();
 
     /**
-     * @return  ChunkWorld that is managing the chunk, null if it has not been assigned.
+     * @return ChunkWorld that is managing the chunk, null if it has not been
+     *         assigned.
      */
     ChunkWorld getWorld();
 }

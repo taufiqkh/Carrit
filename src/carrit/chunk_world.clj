@@ -3,7 +3,8 @@
   (:use carrit.region-file
         carrit.byte-convert)
   (:import com.quiptiq.carrit.ChunkWorld
-           com.quiptiq.carrit.Chunk)
+           com.quiptiq.carrit.Chunk
+           com.quiptiq.carrit.ChunkBlock)
   (:gen-class
     :constructors {[] []}
     :init init
@@ -29,6 +30,16 @@
 Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
   (byte-array (reduce concat [] (repeat (* *chunk-size-x* *chunk-size-z*) column))))
 
+(defn dummy-chunk-block [chunk-data x y z blockTypeId skyLight]
+  (reify ChunkBlock
+    (getBlockTypeId [_] blockTypeId)
+    (getBlockData [_] (byte 0))
+    (getLightEmitted [_] (byte 0))
+    (getSkyLight [_] skyLight)
+    (getX [_] x)
+    (getY [_] y)
+    (getZ [_] z)))
+
 (defn dummy-chunk [chunk-world x y z]
   (reify Chunk
     ; Ids of the blocks in this chunk.
@@ -41,6 +52,13 @@ Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
                  (gen-dummy-data (repeat (/ *chunk-size-y* 2) (unsigned-byte 0xFF))))
     ; Amount of light emitted per block, 4 bits per block.
     (getBlockLight [_] (gen-dummy-data (repeat (/ *chunk-size-y* 2) 0)))
+    ; Prepares a ChunkBlock from the data at the specified coordinates, which
+    ; must exist within this chunk. If this chunk does not contain the
+    ; specified coordinates, returns null.
+    (getChunkBlock [_ blockX blockY blockZ]
+                   (dummy-chunk-block blockX blockY blockZ
+                                      (if (> blockY *default-sea-level*) (byte 0) (byte 1))
+                                      (if (>= blockY *default-sea-level*) (byte 3) (byte 0))))
     ; The lowest level in each column in where the light from the sky
     ; is at full strength. This is arranged Z, X.
     (getHeightMap [_] (byte-array (repeat (* *chunk-size-x* *chunk-size-z*) *default-sea-level*)))
