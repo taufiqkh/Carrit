@@ -2,6 +2,12 @@
 
 (set! *warn-on-reflection* true)
 
+(def ^{:doc "Length of a short, in bytes"} *short-length* (/ Short/SIZE 8))
+(def ^{:doc "Length of an int, in bytes"} *int-length* (/ Integer/SIZE 8))
+(def ^{:doc "Length of a long, in bytes"} *long-length* (/ Long/SIZE 8))
+(def ^{:doc "Length of a float, in bytes"} *float-length* (/ Float/SIZE 8))
+(def ^{:doc "Length of a double, in bytes"} *double-length* (/ Double/SIZE 8))
+
 ; TODO: If possible, change to macro
 (defn unsigned-byte-to-num [bval]
   "Converts a byte to a number using unsigned arithmetic"
