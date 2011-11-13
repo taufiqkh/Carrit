@@ -1,5 +1,5 @@
 (ns carrit.named-binary-tag
-  "Named Binary Tag format functions"
+  "Named Binary Tag format functions, as conforming to the NBT format specified at http://mc.kev009.com/NBT"
   (:require [clojure.contrib.logging :as logging])
   (:use carrit.byte-convert)
   (:import java.util.Arrays))
@@ -18,7 +18,7 @@
 (def ^{:doc "Sequential list of a specified type."} *list* 9)
 (def ^{:doc "Compound tag, which is a sequential list of uniquely named tags."} *compound* 10)
 
-(def ^{:doc "UTF-8 encoding"} *utf-8* "UTF-8")
+(def ^{:doc "UTF-8 encoding" :tag String} *utf-8* "UTF-8")
 
 (defrecord NamedBinaryTag [type name payload])
 
@@ -50,13 +50,13 @@ returns it as a UTF-8 string."
 
 (defn read-nbt-from-byte-array [^bytes chunk-bytes idx]
   (let [nbt-type (aget chunk-bytes idx)]
-    (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
+    ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
     (if (= nbt-type *end*)
       {:data (NamedBinaryTag. nbt-type nil nil) :length 1}
       (let [nbt-name-data (read-utf-8 chunk-bytes (inc idx))
             ; payload index starts after type, name length and name
             payload-data (payload-from-byte-array nbt-type chunk-bytes (+ idx 1 *short-length* (nbt-name-data :length)))]
-        (logging/debug nbt-name-data)
+        ; (logging/debug nbt-name-data)
         {:data (NamedBinaryTag. nbt-type (nbt-name-data :data) (payload-data :data))
          ; tag id length + "name length" length + name length + payload length
          :length (+ 1 *short-length* (nbt-name-data :length) (payload-data :length))}))))
@@ -97,22 +97,16 @@ returns it as a UTF-8 string."
         list-length (num-from-byte-array chunk-bytes (inc idx) *int-length*)]
     (loop [num-left list-length next-idx (+ idx 1 *int-length*) acc []]
       (if (zero? num-left)
-        acc
+        {:data acc :length (- next-idx idx)}
         (let [payload-data (payload-from-byte-array tag-id chunk-bytes next-idx)]
-          (recur (dec num-left) (conj acc (payload-data :data)) (+ next-idx payload-data :length)))))))
+          (recur (dec num-left) (+ next-idx (payload-data :length)) (conj acc (payload-data :data))))))))
 
 (defmethod payload-from-byte-array *compound* [tag-id ^bytes chunk-bytes idx]
   (loop [nbt-meta (read-nbt-from-byte-array chunk-bytes idx) acc [] length-acc 0]
-    (logging/debug nbt-meta)
+    ; (logging/debug nbt-meta)
     (let [nbt (nbt-meta :data) nbt-length (nbt-meta :length)] 
       (if (= (:type nbt) *end*)
         {:data (conj acc nbt) :length (+ length-acc nbt-length)}
         (recur (read-nbt-from-byte-array chunk-bytes (+ idx length-acc nbt-length))
                (conj acc nbt)
                (+ length-acc nbt-length))))))
-
-(defn as-nbt [^bytes chunk-bytes]
-  (let [nbt-type (aget chunk-bytes 0)]
-    (if (= nbt-type *compound*)
-      (NamedBinaryTag. *compound* (num-from-byte-array chunk-bytes 1 *short-length*) nil)
-      nil)))

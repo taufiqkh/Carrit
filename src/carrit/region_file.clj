@@ -133,7 +133,11 @@ length, containing the contents of the arrays up to that length."
       (loop [arrays []]
         (let [next-byte-array (byte-array *chunk-sector-size*)]
           (.inflate inflater next-byte-array 0 *chunk-sector-size*)
-          (info "Inflator %d: Read: %d Written %d Finished %b" offset (.getBytesRead inflater) (.getBytesWritten inflater) (.finished inflater))
+          (info "Inflator %d: Read: %d Written %d Finished %b"
+                offset
+                (.getBytesRead inflater)
+                (.getBytesWritten inflater)
+                (.finished inflater))
           (if (.finished inflater)
             (let [bytes-written (.getBytesWritten inflater)]
               {:length bytes-written :data (expand-arrays arrays bytes-written)})
