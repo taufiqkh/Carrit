@@ -41,6 +41,8 @@ returns it as a UTF-8 string."
 ; TODO: Any way to do a partial of read-fn with read-length before passing it in?
 (defn read-nbt-from-byte-array
   [nbt-type chunk-bytes idx read-fn]
+  "Reads an NBT from the specified chunk byte array, starting from the given index using the read-fn
+function"
   (let [string-data (read-utf-8 chunk-bytes idx)]
     (NamedBinaryTag. nbt-type (string-data :data) (read-fn chunk-bytes (+ idx (string-data :length))))))
 
@@ -49,6 +51,7 @@ returns it as a UTF-8 string."
 (defmulti payload-from-byte-array (fn [type-id chunk-bytes idx] type-id))
 
 (defn read-nbt-from-byte-array [^bytes chunk-bytes idx]
+  "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
   (let [nbt-type (aget chunk-bytes idx)]
     ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
     (if (= nbt-type *end*)
@@ -110,3 +113,12 @@ returns it as a UTF-8 string."
         (recur (read-nbt-from-byte-array chunk-bytes (+ idx length-acc nbt-length))
                (conj acc nbt)
                (+ length-acc nbt-length))))))
+
+(defn retrieve-tag [nbt-compound nbt-name]
+  "Retrieves the tag with the specified name from the NBT Compound tag"
+  (loop [remaining-data (:data nbt-compound) remaining-length (:length nbt-compound)]
+    (if (zero? remaining-length)
+      nil
+      (if-let [nbt-tag (= (:name (peek remaining-data)) nbt-name)]
+        nbt-tag
+        (recur (pop remaining-data) (dec remaining-length))))))

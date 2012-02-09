@@ -24,3 +24,5 @@ which demonstrates loading a save directory and extracting a chunk.
 Planned Features
 ----------------
 Still to do are proper exposure of the NBT data, as well as saving chunks and fleshing out the concurrency model.
+
+#1: Implement chunk

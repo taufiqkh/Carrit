@@ -151,10 +151,19 @@ length, containing the contents of the arrays up to that length."
         data-offset (+ offset *chunk-data-lengh-header-size* *chunk-compression-type-size*)]
     {:compressed-length compressed-length
      :compression-type compression-type
-     :data (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)}))
+     :data (read-nbt-from-byte-array
+             (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)
+             0)}))
 
 (defn read-chunk [chunk-byte-array location-offset timestamp-offset]
-  "Reads chunk data from the specified offsets"
+  "Reads chunk data from the specified offsets, returning a chunk map with the
+following keys:
+  compressed-length
+  compression-type
+  data
+  data-offset
+  sectors
+  timestamp"
   (let [data-location (* (num-from-byte-array chunk-byte-array location-offset *chunk-location-offset-size*)
                          *chunk-sector-size*)
         sectors (num-from-byte-array chunk-byte-array
@@ -170,7 +179,7 @@ length, containing the contents of the arrays up to that length."
         (merge chunk-map (read-chunk-data chunk-byte-array data-location (* sectors *chunk-sector-size*)))))))
 
 (defn read-region-file [file-descriptor file]
-  "Reads a region file. Contains side-effects"
+  "Reads a region file, returning a region map of [x z] to chunk-maps. Contains side-effects"
   (let [chunk-byte-array (io! (duck-streams/to-byte-array file))
         loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))
         timestamp-header-offset (* *chunks-per-region* *chunk-location-size*)]
@@ -187,13 +196,18 @@ length, containing the contents of the arrays up to that length."
                    (+ timestamp-header-offset (calc-chunk-header-offset *chunk-timestamp-size* x z))
                    (pop loc-keys-rem)))))))
 
-(defn create-file-descriptor [x y z]
-  "Generates a region file name for the specified coordinates."
-  ; Region determined by right bit shifting x and z
+(defn region-coordinates [x y z]
+  "Given x, y and z coordinates, returns the a map of the base coordinates of the region containing that position."
   (let [shift-map {:x *chunk-x-shift*, :z *chunk-z-shift*}
         val-map {:x x, :z z}
         [xRegion zRegion] (map #(bit-shift-right (val-map %) (shift-map %)) [:x :z])]
-    {:filename (format "r.%d.%d.mcr" xRegion zRegion), :xRegion xRegion, :zRegion zRegion}))
+    {:x xRegion :z zRegion :y y}))
+
+(defn create-file-descriptor [x y z]
+  "Generates a region file name for the specified coordinates."
+  ; Region determined by right bit shifting x and z
+  (let [region-coords (region-coordinates x y z)]
+    {:filename (format "r.%d.%d.mcr" (:x region-coords) (:z region-coords)), :xRegion (:x region-coords), :zRegion (:z region-coords)}))
 
 (defn load-save-dir [^String dirname]
   (if-let [save-dir-files (verify-save-dir (File. dirname))]
