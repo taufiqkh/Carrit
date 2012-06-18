@@ -21,9 +21,10 @@
 
 (def ^{:doc "UTF-8 encoding" :tag String} *utf-8* "UTF-8")
 
-(defrecord NamedBinaryTag [type name payload])
+(defrecord NamedBinaryTag [type name extract])
 
-; TODO: Better way to do this?
+(defrecord ^{:doc "Extract from a byte array, containing copied data and the read length, in bytes"} Extract [data length])
+
 (defn copy-from-byte-array [^bytes chunk-bytes ^Integer idx length]
   "Copies bytes from an array and returns them as a new array."
   (Arrays/copyOfRange chunk-bytes idx #^Integer (+ idx length)))
@@ -31,97 +32,90 @@
 (defn read-utf-8-segment [^bytes chunk-bytes idx byte-length]
   "Reads the specified number of bytes at the given index in the array and
 returns it as a UTF-8 string."
-  (let [^bytes dest (copy-from-byte-array chunk-bytes idx byte-length)]
-    (String. dest #^String *utf-8*)))
+  (let [^bytes buffer (copy-from-byte-array chunk-bytes idx byte-length)]
+    (String. buffer #^String *utf-8*)))
 
-(defn read-utf-8 [^bytes chunk-bytes idx]
+(defn read-utf-8-name [^bytes chunk-bytes idx]
   "Read a tag name from the byte array at the specified index, returning the name and length, in bytes."
   (let [length (num-from-byte-array chunk-bytes idx *short-length*)]
-    {:data (read-utf-8-segment chunk-bytes (+ idx *short-length*) length) :length length}))
+    (Extract. (read-utf-8-segment chunk-bytes (+ idx *short-length*) length) length)))
 
-; TODO: Any way to do a partial of read-fn with read-length before passing it in?
+; Given a byte array, read the extract for the specified type and return that
+; extract and the length, in bytes, of the section that was read.
+(defmulti extract-from-byte-array (fn [type-id chunk-bytes idx] type-id))
+
 (defn read-nbt-from-byte-array
-  [nbt-type chunk-bytes idx read-fn]
-  "Reads an NBT from the specified chunk byte array, starting from the given index using the read-fn
-function"
-  (let [string-data (read-utf-8 chunk-bytes idx)]
-    (NamedBinaryTag. nbt-type (string-data :data) (read-fn chunk-bytes (+ idx (string-data :length))))))
-
-; Given a byte array, read the payload for the specified type and return that
-; payload and the length, in bytes, of the section that was read.
-(defmulti payload-from-byte-array (fn [type-id chunk-bytes idx] type-id))
-
-(defn read-nbt-from-byte-array [^bytes chunk-bytes idx]
-  "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
-  (let [nbt-type (aget chunk-bytes idx)]
-    ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
-    (if (= nbt-type *end*)
-      {:data (NamedBinaryTag. nbt-type nil nil) :length 1}
-      (let [nbt-name-data (read-utf-8 chunk-bytes (inc idx))
-            ; payload index starts after type, name length and name
-            payload-data (payload-from-byte-array nbt-type chunk-bytes (+ idx 1 *short-length* (nbt-name-data :length)))]
-        ; (logging/debug nbt-name-data)
-        {:data (NamedBinaryTag. nbt-type (nbt-name-data :data) (payload-data :data))
-         ; tag id length + "name length" length + name length + payload length
-         :length (+ 1 *short-length* (nbt-name-data :length) (payload-data :length))}))))
+  ([^bytes chunk-bytes idx]
+    "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
+    (let [nbt-type (aget chunk-bytes idx)]
+      ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
+      (if (= nbt-type *end*)
+        (Extract. (NamedBinaryTag. nbt-type nil nil) 1)
+        (let [name-idx (inc idx)
+              nbt-name-data (read-utf-8-name chunk-bytes name-idx)
+              ; Extract index starts after type, name length and name
+              extract-data (extract-from-byte-array nbt-type chunk-bytes (+ idx 1 *short-length* (:length nbt-name-data)))]
+          ; (logging/debug nbt-name-data)
+          (Extract. (NamedBinaryTag. nbt-type (:data nbt-name-data) (:data extract-data))
+                    ; tag id length + "name length" length + name length + extract length
+                    (+ 1 *short-length* (:length nbt-name-data) (:length extract-data))))))))
 
 (defn nbt-from-byte-array [^bytes chunk-bytes idx]
-  ((read-nbt-from-byte-array chunk-bytes idx) :data))
+  (:data (read-nbt-from-byte-array chunk-bytes idx)))
 
-(defmethod payload-from-byte-array *byte* [tag-id ^bytes chunk-bytes idx]
-  {:data (aget chunk-bytes idx) :length 1})
+(defmethod extract-from-byte-array *byte* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (aget chunk-bytes idx) 1))
 
-(defmethod payload-from-byte-array *short* [tag-id ^bytes chunk-bytes idx]
-  {:data (num-from-byte-array chunk-bytes idx *short-length*) :length *short-length*})
+(defmethod extract-from-byte-array *short* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (num-from-byte-array chunk-bytes idx *short-length*) *short-length*))
 
-(defmethod payload-from-byte-array *int* [tag-id ^bytes chunk-bytes idx]
-  {:data (num-from-byte-array chunk-bytes idx *int-length*) :length *int-length*})
+(defmethod extract-from-byte-array *int* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (num-from-byte-array chunk-bytes idx *int-length*) *int-length*))
 
-(defmethod payload-from-byte-array *long* [tag-id ^bytes chunk-bytes idx]
-  {:data (num-from-byte-array chunk-bytes idx *long-length*) :length *long-length*})
+(defmethod extract-from-byte-array *long* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (num-from-byte-array chunk-bytes idx *long-length*) *long-length*))
 
-(defmethod payload-from-byte-array *float* [tag-id ^bytes chunk-bytes idx]
-  {:data (num-from-byte-array chunk-bytes idx *float-length*) :length *float-length*})
+(defmethod extract-from-byte-array *float* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (num-from-byte-array chunk-bytes idx *float-length*) *float-length*))
 
-(defmethod payload-from-byte-array *double* [tag-id ^bytes chunk-bytes idx]
-  {:data (num-from-byte-array chunk-bytes idx *double-length*) :length *double-length*})
+(defmethod extract-from-byte-array *double* [tag-id ^bytes chunk-bytes idx]
+  (Extract. (num-from-byte-array chunk-bytes idx *double-length*) *double-length*))
 
-(defmethod payload-from-byte-array *byte-array* [tag-id ^bytes chunk-bytes idx]
+(defmethod extract-from-byte-array *byte-array* [tag-id ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx *int-length*)]
-    {:data (copy-from-byte-array chunk-bytes (+ idx *int-length*) length)
-     :length (+ *int-length* length)}))
+    (Extract. (copy-from-byte-array chunk-bytes (+ idx *int-length*) length)
+              (+ *int-length* length))))
 
-(defmethod payload-from-byte-array *string* [tag-id ^bytes chunk-bytes idx]
+(defmethod extract-from-byte-array *string* [tag-id ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx *short-length*)]
-    {:data (read-utf-8-segment chunk-bytes (+ idx *short-length*) length)
-     :length (+ *short-length* length)}))
+    (Extract. (read-utf-8-segment chunk-bytes (+ idx *short-length*) length)
+              (+ *short-length* length))))
 
-(defmethod payload-from-byte-array *list* [tag-id ^bytes chunk-bytes idx]
+(defmethod extract-from-byte-array *list* [tag-id ^bytes chunk-bytes idx]
   (let [tag-id (aget chunk-bytes idx)
         list-length (num-from-byte-array chunk-bytes (inc idx) *int-length*)]
     (loop [num-left list-length next-idx (+ idx 1 *int-length*) acc []]
       (if (zero? num-left)
-        {:data acc :length (- next-idx idx)}
-        (let [payload-data (payload-from-byte-array tag-id chunk-bytes next-idx)]
-          (recur (dec num-left) (+ next-idx (payload-data :length)) (conj acc (payload-data :data))))))))
+        (Extract. acc (- next-idx idx))
+        (let [extract-data (extract-from-byte-array tag-id chunk-bytes next-idx)]
+          (recur (dec num-left) (+ next-idx (:length extract-data)) (conj acc (:data extract-data))))))))
 
-(defmethod payload-from-byte-array *compound* [tag-id ^bytes chunk-bytes idx]
+(defmethod extract-from-byte-array *compound* [tag-id ^bytes chunk-bytes idx]
   (loop [nbt-meta (read-nbt-from-byte-array chunk-bytes idx) acc [] length-acc 0]
     ; (logging/debug nbt-meta)
-    (let [nbt (nbt-meta :data) nbt-length (nbt-meta :length)] 
+    (let [nbt (:data nbt-meta) nbt-length (:length nbt-meta)] 
       (if (= (:type nbt) *end*)
-        {:data (conj acc nbt) :length (+ length-acc nbt-length)}
+        (Extract. (conj acc nbt) (+ length-acc nbt-length))
         (recur (read-nbt-from-byte-array chunk-bytes (+ idx length-acc nbt-length))
                (conj acc nbt)
                (+ length-acc nbt-length))))))
 
-(defmethod payload-from-byte-array *int-array* [tag-id ^bytes chunk-bytes idx]
+(defmethod extract-from-byte-array *int-array* [tag-id ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx *int-length*)
         data (int-array length)]
     (doseq [^Integer int-idx (range 0 length)]
              (aset data int-idx ^Integer (num-from-byte-array chunk-bytes (+ idx *int-length* (* int-idx *int-length*)) *int-length*)))
-    {:data data
-     :length (+ *int-length* (* *int-length* length))}))
+    (Extract. data (+ *int-length* (* *int-length* length)))))
 
 (defn retrieve-tag [nbt-compound nbt-name]
   "Retrieves the tag with the specified name from the NBT Compound tag"

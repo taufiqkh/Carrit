@@ -22,7 +22,7 @@
   (let [test-string "κόσμε"]
     (is (= test-string (reconstruct-utf-8 test-string)))))
 
-(deftest test-read-utf-8
+(deftest test-read-utf-8-name
   "Length-specified string from a byte array"
   (let [^String test-string "This is a string"
         test-string-array (.getBytes test-string *utf-8*)
@@ -33,17 +33,17 @@
         (is (= (num-from-byte-array test-array 0 *short-length*) test-len)))
       (doseq [idx (range (alength test-string-array))]
         (aset-byte test-array (+ idx 2) (aget test-string-array idx)))
-      (is (not (nil? (read-utf-8 test-array 0))))))
+      (is (not (nil? (read-utf-8-name test-array 0))))))
 
-(deftest test-read-int-array-payload
-  "Read an IntArray payload from a byte array"
+(deftest test-read-int-array-extract
+  "Read an IntArray extract from a byte array"
   (let [length 2
         ^bytes chunk-bytes (byte-array (map byte [0 0 0 length
                                                   0 0 0 2
                                                   0 0 0 1])) ; 4 initial bytes for array length
-        payload (payload-from-byte-array *int-array* ^bytes chunk-bytes 0)]
-    (is (= (+ *int-length* (* *int-length* length)) (:length payload)))
-    (is (= [2 1] (vec (:data payload))))))
+        extract (extract-from-byte-array *int-array* ^bytes chunk-bytes 0)]
+    (is (= (+ *int-length* (* *int-length* length)) (:length extract)))
+    (is (= [2 1] (vec (:data extract))))))
 
 (deftest integration-test-nbt
   "Full test with an NBT file"
