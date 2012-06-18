@@ -16,7 +16,7 @@
 (def *minecraft-dir* "Whole New World")
 
 (def ^{:doc "Number of blocks along the x axis of a chunk"} *chunk-size-x* 16)
-(def ^{:doc "Number of blocks along the y axis of a chunk"} *chunk-size-y* 128)
+(def ^{:doc "Number of blocks along the y axis of a chunk"} *chunk-size-y* 16)
 (def ^{:doc "Number of blocks along the z axis of a chunk"} *chunk-size-z* 16)
 
 (def ^{:doc "Name of tag containing blocks"} *tag-blocks* "Blocks")
@@ -146,7 +146,7 @@ Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
   (let [world-data
         (if-let [save-dir (load-save-dir world-name)]
           (let [origin-descriptor (create-file-descriptor 0 0 0)]
-            {[0 0] (read-region-file origin-descriptor ((save-dir :region-map) (origin-descriptor :filename)))})
+            {[0 0] (read-region-file origin-descriptor ((:region-map save-dir) (:filename origin-descriptor)))})
         nil)]
     (if (nil? world-data)
       nil

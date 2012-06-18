@@ -1,7 +1,7 @@
 (ns carrit.named-binary-tag
   "Named Binary Tag format functions, as conforming to the NBT format specified at http://mc.kev009.com/NBT"
-  (:require [clojure.contrib.logging :as logging])
-  (:use carrit.byte-convert)
+  (:use carrit.byte-convert
+        carrit.logging)
   (:import java.util.Arrays))
 
 (set! *warn-on-reflection* true)
@@ -17,6 +17,7 @@
 (def ^{:doc "String."} *string* 8)
 (def ^{:doc "Sequential list of a specified type."} *list* 9)
 (def ^{:doc "Compound tag, which is a sequential list of uniquely named tags."} *compound* 10)
+(def ^{:doc "Length-prefixed array of signed, 4 byte integers"} *int-array* 11)
 
 (def ^{:doc "UTF-8 encoding" :tag String} *utf-8* "UTF-8")
 
@@ -113,6 +114,14 @@ function"
         (recur (read-nbt-from-byte-array chunk-bytes (+ idx length-acc nbt-length))
                (conj acc nbt)
                (+ length-acc nbt-length))))))
+
+(defmethod payload-from-byte-array *int-array* [tag-id ^bytes chunk-bytes idx]
+  (let [length (num-from-byte-array chunk-bytes idx *int-length*)
+        data (int-array length)]
+    (doseq [^Integer int-idx (range 0 length)]
+             (aset data int-idx ^Integer (num-from-byte-array chunk-bytes (+ idx *int-length* (* int-idx *int-length*)) *int-length*)))
+    {:data data
+     :length (+ *int-length* (* *int-length* length))}))
 
 (defn retrieve-tag [nbt-compound nbt-name]
   "Retrieves the tag with the specified name from the NBT Compound tag"

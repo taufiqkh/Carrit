@@ -1,4 +1,11 @@
 *.*~
+.lein-deps-sum
+.lein-failures
+.settings
+clojure-contrib-src.jar
+clojure-contrib.jar
+clojure-src.jar
+clojure.jar
 pom.xml
 bin
 classes

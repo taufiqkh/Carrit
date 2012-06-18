@@ -35,6 +35,16 @@
         (aset-byte test-array (+ idx 2) (aget test-string-array idx)))
       (is (not (nil? (read-utf-8 test-array 0))))))
 
+(deftest test-read-int-array-payload
+  "Read an IntArray payload from a byte array"
+  (let [length 2
+        ^bytes chunk-bytes (byte-array (map byte [0 0 0 length
+                                                  0 0 0 2
+                                                  0 0 0 1])) ; 4 initial bytes for array length
+        payload (payload-from-byte-array *int-array* ^bytes chunk-bytes 0)]
+    (is (= (+ *int-length* (* *int-length* length)) (:length payload)))
+    (is (= [2 1] (vec (:data payload))))))
+
 (deftest integration-test-nbt
   "Full test with an NBT file"
   (let [test-file (File. "test/resources/test.nbt") chunk-byte-array (io! (duck-streams/to-byte-array test-file))]

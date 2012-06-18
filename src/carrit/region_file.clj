@@ -1,27 +1,19 @@
 (ns carrit.region-file
-  (:require [clojure.contrib.logging :as logging]
-            [clojure.contrib.duck-streams :as duck-streams]
+  (:require [clojure.contrib.duck-streams :as duck-streams]
             [clojure.contrib.generic.math-functions :as math]
             [clojure.contrib.string :as string])
   (:import java.io.File
            java.util.Arrays
            java.util.zip.Inflater)
   (:use carrit.named-binary-tag
-        carrit.byte-convert))
+        carrit.byte-convert
+        carrit.logging))
 (set! *warn-on-reflection* true)
 ; Not idiomatic clojure; that will have to wait until I learn how to do things properly.
   
 (def *expected-save-entries* #{"data" "region" "level.dat"})
 
-(defn info
-  "Logs the specified string using a standard logger"
-  [log-message & parameters]
-  (logging/info (apply format log-message parameters)))
-
-(defn debug
-  "Logs the specified string using a standard logger with debug"
-  [log-message & parameters]
-  (logging/debug (apply format log-message parameters)))
+(defrecord FileDescriptor (filename xRegion zRegion))
 
 (defn verify-save-dir [^File directory]
   "Verifies that a given directory contains the files/directories expected in a
@@ -89,10 +81,11 @@ must be at least the size of a chunk length header."
   "Derives a chunk coordinate range from a region"
   (range (bit-shift-left region shift) (bit-shift-left (inc region) shift)))
 
-(defn region-loc-keys [x-region z-region]
-  "Creates a set of location keys of [x, z] for all x, z in a region"
-  (let [x-range (chunk-range x-region *chunk-x-shift*)
-        z-range (chunk-range z-region *chunk-z-shift*)]
+(defn region-loc-keys [descriptor]
+  "Creates a set of location keys of [x, z] for all x, z in the region described by the specified descriptor"
+  (let [x-range (chunk-range (:xRegion descriptor) *chunk-x-shift*)
+        z-range (chunk-range (:zRegion descriptor) *chunk-z-shift*)]
+    ; TODO: Explore less imperative way of writing this, something like:
     ;loc-key (reduce conj (map (fn [x inner-z] (map (fn [z] (vector x z)) inner-z)) x-range (repeat z-range)))]
     ; Need to rewrite for clarity:
     (loop [x-rem x-range
@@ -148,22 +141,24 @@ length, containing the contents of the arrays up to that length."
   "Reads the chunk header and data at a specified offset. Contains side effects."
   (let [compressed-length (num-from-byte-array chunk-byte-array offset *chunk-data-lengh-header-size*)
         compression-type (num-from-byte-array chunk-byte-array offset *chunk-compression-type-size*)
-        data-offset (+ offset *chunk-data-lengh-header-size* *chunk-compression-type-size*)]
-    {:compressed-length compressed-length
-     :compression-type compression-type
-     :data (read-nbt-from-byte-array
-             (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)
-             0)}))
+        data-offset (+ offset *chunk-data-lengh-header-size* *chunk-compression-type-size*)
+        inflated-data (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)]
+    {:compressed-length compressed-length,
+     :compression-type compression-type,
+     :data (read-nbt-from-byte-array (:data inflated-data) 0),
+     :length (:length inflated-data)}))
 
 (defn read-chunk [chunk-byte-array location-offset timestamp-offset]
   "Reads chunk data from the specified offsets, returning a chunk map with the
 following keys:
+  data-offset
+  sectors
+  timestamp
+and the following additional keys if the chunk map has been generated
   compressed-length
   compression-type
   data
-  data-offset
-  sectors
-  timestamp"
+  length"
   (let [data-location (* (num-from-byte-array chunk-byte-array location-offset *chunk-location-offset-size*)
                          *chunk-sector-size*)
         sectors (num-from-byte-array chunk-byte-array
@@ -181,7 +176,7 @@ following keys:
 (defn read-region-file [file-descriptor file]
   "Reads a region file, returning a region map of [x z] to chunk-maps. Contains side-effects"
   (let [chunk-byte-array (io! (duck-streams/to-byte-array file))
-        loc-keys (region-loc-keys (:xRegion file-descriptor) (:zRegion file-descriptor))
+        loc-keys (region-loc-keys file-descriptor)
         timestamp-header-offset (* *chunks-per-region* *chunk-location-size*)]
       (loop [region-map {}
            location-read-from 0
@@ -207,7 +202,9 @@ following keys:
   "Generates a region file name for the specified coordinates."
   ; Region determined by right bit shifting x and z
   (let [region-coords (region-coordinates x y z)]
-    {:filename (format "r.%d.%d.mcr" (:x region-coords) (:z region-coords)), :xRegion (:x region-coords), :zRegion (:z region-coords)}))
+    (FileDescriptor. (format "r.%d.%d.mca" (:x region-coords) (:z region-coords))
+                     (:x region-coords)
+                     (:z region-coords))))
 
 (defn load-save-dir [^String dirname]
   (if-let [save-dir-files (verify-save-dir (File. dirname))]
