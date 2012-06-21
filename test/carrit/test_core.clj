@@ -18,4 +18,4 @@
   "Number from a byte array in the region file format"
   (is (= 262405 (num-from-byte-array (vec-as-byte-array [4 1 5]) 0 3)))
   (is (= 2560 (num-from-byte-array (vec-as-byte-array [0 0xa 0]) 0 3)))
-  (is (= 2728 (num-from-byte-array (vec-as-byte-array [0 0xa (unsigned-byte 0xa8)]) 0 3))))
+  (is (= 2728 (num-from-byte-array (vec-as-byte-array [0 0xa (unchecked-byte 0xa8)]) 0 3))))
