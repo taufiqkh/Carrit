@@ -5,7 +5,7 @@
            java.io.File))
 
 ; TODO: This could no doubt be done more succinctly
-(deftest test-create-file-descriptor
+(deftest test-create-file-descriptor-from-coords
   "Given an x/y/z coordinate, ensure that the file descriptor is correct"
   (let [descriptor (create-file-descriptor 0 0 0)]
     (is (= (:filename descriptor) "r.0.0.mca"))
@@ -28,5 +28,23 @@
     (is (= (:xRegion descriptor) 4))
     (is (= (:zRegion descriptor) -4))))
 
+(deftest test-create-file-descriptor-from-filename
+  "Given a filename, ensure that the file descriptor is correct"
+  (let [filename "r.0.0.mca"
+        descriptor (create-file-descriptor filename)]
+    (is (= (:filename descriptor) filename))
+    (is (= (:xRegion descriptor) 0))
+    (is (= (:xRegion descriptor) 0)))
+  (let [filename "r.-123.0.mca"
+        descriptor (create-file-descriptor filename)]
+    (is (= (:filename descriptor) filename))
+    (is (= (:xRegion descriptor) -123))
+    (is (= (:zRegion descriptor) 0)))
+  (let [filename "r.-98912.-545.mca"
+        descriptor (create-file-descriptor filename)]
+    (is (= (:filename descriptor) filename))
+    (is (= (:xRegion descriptor) -98912))
+    (is (= (:zRegion descriptor) -545))))
+  
 (deftest test-read-region-file
   (is (not (nil? (read-region-file (File. "test/resources/Test World/region/r.0.0.mca"))))))

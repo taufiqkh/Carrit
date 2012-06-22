@@ -184,7 +184,7 @@ and the following additional keys if the chunk map has been generated
 
 (defn create-file-descriptor
   ([filename]
-    (if-let [[x z] (map read-string (next (re-find #"r\.([0-9]+)\.([0-9]+)\.mca" filename)))]
+    (if-let [[x z] (map read-string (next (re-find #"r\.(-?[0-9]+)\.(-?[0-9]+)\.mca" filename)))]
       (FileDescriptor. filename x z)))
   ([x y z]
     "Generates a region file name for the specified coordinates."
@@ -198,21 +198,21 @@ and the following additional keys if the chunk map has been generated
     (let [chunk-byte-array (slurp-binary-file! file)
           loc-keys (region-loc-keys file-descriptor)
           timestamp-header-offset (* chunks-per-region chunk-location-size)]
-        (loop [region (Region. (:filename file-descriptor) (:xRegion file-descriptor) (:zRegion file-descriptor) {})
-             location-read-from 0
-             timestamp-read-from (* chunks-per-region chunk-location-size)
-             loc-keys-rem loc-keys]
-          (if (empty? loc-keys-rem)
-            region
-            (let [[x z] (peek loc-keys-rem)]
-              (recur (assoc region
-                            :chunks
-                            (assoc (:chunks region)
-                                   [x z]
-                                   (read-chunk chunk-byte-array location-read-from timestamp-read-from)))
-                     (long (calc-chunk-header-offset chunk-location-size x z))
-                     (+ timestamp-header-offset (calc-chunk-header-offset chunk-timestamp-size x z))
-                     (pop loc-keys-rem)))))))
+      (loop [region (Region. (:filename file-descriptor) (:xRegion file-descriptor) (:zRegion file-descriptor) {})
+           location-read-from 0
+           timestamp-read-from (* chunks-per-region chunk-location-size)
+           loc-keys-rem loc-keys]
+        (if (empty? loc-keys-rem)
+          region
+          (let [[x z] (peek loc-keys-rem)]
+            (recur (assoc region
+                          :chunks
+                          (assoc (:chunks region)
+                                 [x z]
+                                 (read-chunk chunk-byte-array location-read-from timestamp-read-from)))
+                   (long (calc-chunk-header-offset chunk-location-size x z))
+                   (+ timestamp-header-offset (calc-chunk-header-offset chunk-timestamp-size x z))
+                   (pop loc-keys-rem)))))))
   ([^File file]
     (read-region-file (create-file-descriptor (.getName file)) file)))
 
