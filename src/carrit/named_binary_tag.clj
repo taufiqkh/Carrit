@@ -111,13 +111,13 @@ expected to be prefixed by the length of the name."
           (recur (dec num-left) (+ next-idx (:length extract-data)) (conj acc (:data extract-data))))))))
 
 (defmethod extract-from-byte-array type-compound [tag-type ^bytes chunk-bytes idx]
-  (loop [extract (extract-nbt-from-byte-array chunk-bytes idx) acc [] length-acc 0]
+  (loop [extract (extract-nbt-from-byte-array chunk-bytes idx) children {} length 0]
     (let [nbt (:data extract) nbt-length (long (:length extract))] 
       (if (= (:type nbt) type-end)
-        (Extract. (conj acc nbt) (+ length-acc nbt-length))
-        (recur (extract-nbt-from-byte-array chunk-bytes (+ idx length-acc nbt-length))
-               (conj acc nbt)
-               (+ length-acc nbt-length))))))
+        (Extract. children (+ length nbt-length))
+        (recur (extract-nbt-from-byte-array chunk-bytes (+ idx length nbt-length))
+               (assoc children (:name nbt) nbt)
+               (+ length nbt-length))))))
 
 (defmethod extract-from-byte-array type-int-array [tag-type ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx int-length)
@@ -142,6 +142,8 @@ expected to be prefixed by the length of the name."
 (defn traverse [nbt traversal-fn]
   (traversal-fn nbt)
   (info "NBT" (type-name nbt) (str "\"" (if-let [name (:name nbt)] name "") "\""))
-  (if (contains? #{type-byte-array type-list type-compound type-int-array} (:type nbt))
+  (if (contains? #{type-byte-array type-list type-int-array} (:type nbt))
     (dorun (map #(traverse % traversal-fn) (:data nbt)))
-    nil))
+    (if (= type-compound (:type nbt))
+      (dorun (map #(traverse % traversal-fn) (:data (vals nbt))))
+      nil)))

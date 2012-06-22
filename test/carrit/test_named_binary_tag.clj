@@ -50,6 +50,24 @@
       (is (= length (alength nbt-array)))
       (is (Arrays/equals (int-array length [2 1]) nbt-array)))))
 
+(deftest test-read-compound-extract-nbt
+  "Read a compound extract from a byte array"
+  (let [^bytes chunk-bytes (byte-array (map unchecked-byte [type-compound
+                                                            0 4
+                                                            116 101 115 116 ; "test"
+                                                            type-string
+                                                            0 1
+                                                            97
+                                                            0 9
+                                                            0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
+                                                            type-end]))
+        extract (extract-nbt-from-byte-array chunk-bytes 0)
+        compound-nbt (:data extract)
+        children (:data compound-nbt)]
+    (is (= (:name compound-nbt) "test"))
+    (is (contains? children "a"))
+    (is (= (children "a")))))
+
 (deftest integration-test-nbt
   "Full test with an NBT file"
   (let [test-file (File. "test/resources/test.nbt") chunk-byte-array (slurp-binary-file! test-file)]
