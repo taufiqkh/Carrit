@@ -1,6 +1,7 @@
 (ns carrit.named-binary-tag
   "Named Binary Tag format functions, as conforming to the NBT format specified at http://mc.kev009.com/NBT"
-  (:use carrit.byte-convert))
+  (:use clojure.tools.logging
+        carrit.byte-convert))
 
 (set! *warn-on-reflection* true)
 
@@ -29,7 +30,24 @@
 
 (def ^{:doc "UTF-8 encoding" :tag String} utf-8 "UTF-8")
 
-(defrecord NamedBinaryTag [type data name])
+(defrecord NamedBinaryTag [type data name child-type])
+
+(defn make-named-binary-tag [type data & opts] (NamedBinaryTag. (num type) data (first opts) (second opts)))
+
+(def type-names (hash-map type-end "End"
+                   type-byte "Byte"
+                   type-short "Short"
+                   type-int "Int"
+                   type-long "Long"
+                   type-float "Float"
+                   type-double "Double"
+                   type-byte-array "Byte Array"
+                   type-string "String"
+                   type-list "List"
+                   type-compound "Compound"
+                   type-int-array "Int Array"))
+
+(defn type-name [nbt] (get type-names (:type nbt)))
 
 (defrecord ^{:doc "Extract from a byte array, containing copied data and the read length, in bytes"}
             Extract [data length])
@@ -53,16 +71,16 @@ expected to be prefixed by the length of the name."
 (defn extract-nbt-from-byte-array
   ([^bytes chunk-bytes idx]
     "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
-    (let [nbt-type (aget chunk-bytes idx)]
+    (let [nbt-type (num-from-byte-array chunk-bytes idx)]
       ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
       (if (= (int nbt-type) type-end)
-        (Extract. (NamedBinaryTag. nbt-type nil nil) 1)
+        (Extract. (make-named-binary-tag nbt-type nil) 1)
         (let [name-idx (inc idx)
               nbt-name (extract-utf-8-name chunk-bytes name-idx)
               ; Extract index starts after type, name length and name
               extract (extract-from-byte-array nbt-type chunk-bytes (+ idx 1 short-length (:length nbt-name)))]
           ; (logging/debug nbt-name-data)
-          (Extract. (NamedBinaryTag. nbt-type (:data extract) (:data nbt-name))
+          (Extract. (make-named-binary-tag nbt-type (:data extract) (:data nbt-name))
                     ; tag id length + "name length" length + name length + extract length
                     (+ 1 short-length (:length nbt-name) (:length extract))))))))
 
@@ -70,15 +88,12 @@ expected to be prefixed by the length of the name."
   (:data (extract-nbt-from-byte-array chunk-bytes idx)))
 
 (defmethod extract-from-byte-array type-byte [tag-type ^bytes chunk-bytes idx]
-  (Extract. (NamedBinaryTag. type-byte (aget chunk-bytes idx) nil) 1))
+  (Extract. (make-named-binary-tag type-byte (aget chunk-bytes idx) nil) 1))
 
 (defmethod extract-from-byte-array type-byte-array [tag-type ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx int-length)
         start-idx (+ idx int-length)]
-    (Extract. (reduce (fn [byte-seq byte-idx]
-                        (conj byte-seq (aget chunk-bytes byte-idx)))
-                      []
-                      (range start-idx (+ start-idx length)))
+    (Extract. (make-named-binary-tag type-byte-array (copy-from-byte-array chunk-bytes start-idx length))
               (+ int-length length))))
 
 (defmethod extract-from-byte-array type-string [tag-type ^bytes chunk-bytes idx]
@@ -87,7 +102,7 @@ expected to be prefixed by the length of the name."
               (+ short-length length))))
 
 (defmethod extract-from-byte-array type-list [tag-type ^bytes chunk-bytes idx]
-  (let [list-tag-type (aget chunk-bytes idx)
+  (let [list-tag-type (num-from-byte-array chunk-bytes idx)
         list-length (num-from-byte-array chunk-bytes (inc idx) int-length)]
     (loop [num-left list-length next-idx (+ idx 1 int-length) acc []]
       (if (zero? num-left)
@@ -109,11 +124,11 @@ expected to be prefixed by the length of the name."
         data (int-array length)]
     (doseq [^Integer int-idx (range 0 length)]
              (aset data int-idx ^Integer (num-from-byte-array chunk-bytes (+ idx int-length (* int-idx int-length)) int-length)))
-    (Extract. data (+ int-length (* int-length length)))))
+    (Extract. (make-named-binary-tag tag-type data) (+ int-length (* int-length length)))))
 
 (defmethod extract-from-byte-array :default [tag-type ^bytes chunk-bytes idx]
   (let [type-length (get type-lengths (int tag-type))]
-    (Extract. (num-from-byte-array chunk-bytes idx type-length) type-length)))
+    (Extract. (make-named-binary-tag tag-type (num-from-byte-array chunk-bytes idx type-length)) type-length)))
 
 (defn retrieve-tag [nbt-compound nbt-name]
   "Retrieves the tag with the specified name from the NBT Compound tag"
@@ -123,3 +138,10 @@ expected to be prefixed by the length of the name."
       (if-let [nbt-tag (= (:name (peek remaining-data)) nbt-name)]
         nbt-tag
         (recur (pop remaining-data) (dec remaining-length))))))
+
+(defn traverse [nbt traversal-fn]
+  (traversal-fn nbt)
+  (info "NBT" (type-name nbt) (str "\"" (if-let [name (:name nbt)] name "") "\""))
+  (if (contains? #{type-byte-array type-list type-compound type-int-array} (:type nbt))
+    (dorun (map #(traverse % traversal-fn) (:data nbt)))
+    nil))

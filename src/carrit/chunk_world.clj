@@ -157,6 +157,3 @@ Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
         (getChunkSizeX [_] chunk-size-x)
         (getChunkSizeY [_] chunk-size-y)
         (getChunkSizeZ [_] chunk-size-z)))))
-
-(defn -main [& options]
-  (-loadChunkWorld nil minecraft-dir))

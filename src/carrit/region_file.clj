@@ -119,8 +119,6 @@ length, containing the contents of the arrays up to that length."
           (System/arraycopy next-array 0 destination offset next-length)
           (recur (rest arrays-rem) (+ offset (alength next-array)) (- length-remaining next-length)))))))
 
-; TODO: Fix infinite loop in case inflator doesn't think it's finished once
-; it's reached compressed length
 (defn inflate-chunk-data [chunk-byte-array offset compressed-length alloc-length]
   "Reads chunk data from the specified array, using the given offset and length"
   (debug "Inflating chunk data offset " offset
@@ -130,17 +128,17 @@ length, containing the contents of the arrays up to that length."
     {:length 0 :data nil}
     (let [inflater (Inflater.)]
       (.setInput inflater chunk-byte-array offset compressed-length)
-      (loop [arrays []]
-        (let [next-byte-array (byte-array chunk-sector-size)]
-          (.inflate inflater next-byte-array 0 chunk-sector-size)
-          (info "Inflator " offset
-                ": Read: " (.getBytesRead inflater)
+      (loop [arrays [] next-byte-array (byte-array chunk-sector-size)]
+        (.inflate inflater next-byte-array 0 chunk-sector-size)
+        (let [bytes-read (.getBytesRead inflater)]
+          (debug "Inflator " offset
+                ": Read: " bytes-read
                 " Written " (.getBytesWritten inflater)
                 " Finished "(.finished inflater))
-          (if (.finished inflater)
+          (if (or (.finished inflater) (= bytes-read compressed-length))
             (let [bytes-written (.getBytesWritten inflater)]
               {:length bytes-written :data (expand-arrays arrays bytes-written)})
-            (recur (conj arrays next-byte-array))))))))
+            (recur (conj arrays next-byte-array) (byte-array chunk-sector-size))))))))
 
 (defn read-chunk-data [chunk-byte-array offset alloc-length]
   {:pre [(>= offset 0) (> alloc-length 0)]}
