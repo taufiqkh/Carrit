@@ -143,17 +143,19 @@ Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
 
 (defn -loadChunkWorld [this world-name]
   ; Read the origin chunk, if possible
-  (let [world-data
-        (if-let [save-dir (load-save-dir world-name)]
+  (let [regions
+        (if-let [save-dir (save-dir-files world-name)]
           (let [origin-descriptor (create-file-descriptor 0 0 0)]
-            {[0 0] (read-region-file origin-descriptor ((:region-map save-dir) (:filename origin-descriptor)))})
+            {[0 0] (read-region-file origin-descriptor ((:region-files save-dir) (:filename origin-descriptor)))})
         nil)]
-    (if (nil? world-data)
+    (if (nil? regions)
       nil
       (reify ChunkWorld
         (hasChunk [this x y z]
-                  (contains? world-data [x y]))
-        (getChunk [this x y z] (if (contains? world-data [x y]) (get-chunk this (get world-data [x y]) x y z) nil))
+                  (contains? regions (region-coordinates [x y z])))
+        (getChunk [this x y z]
+                  (if (contains? regions (region-coordinates [x y z]))
+                    (get-chunk this (get regions (region-coordinates [x y z])) x y z) nil))
         (getChunkSizeX [_] chunk-size-x)
         (getChunkSizeY [_] chunk-size-y)
         (getChunkSizeZ [_] chunk-size-z)))))

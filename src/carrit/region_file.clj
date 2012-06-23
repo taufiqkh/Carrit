@@ -11,9 +11,11 @@
 (set! *warn-on-reflection* true)
 ; Not idiomatic clojure; that will have to wait until I learn how to do things properly.
   
-(def expected-save-entries #{"data" "region" "level.dat"})
+(def expected-save-entries #{"region" "level.dat"})
 
-(defrecord FileDescriptor (filename xRegion zRegion))
+(defrecord FileDescriptor [filename xRegion zRegion])
+
+(defrecord Region [filename x z chunks])
 
 (defn slurp-binary-file! [^File file]
   (io! (with-open [reader (io/input-stream file)]
@@ -38,11 +40,11 @@ save game directory and returns a sequence of those files."
 files for that directory, mapped by file name."
   (if (empty? files)
     (info "Files exhausted before region directory found.")
-    (let [^File first-file (first files)]
+    (let [^File file (first files)]
       (io!
-        (if (= "region" (.getName first-file))
-          (if (.isDirectory first-file)
-            (let [region-file-seq (file-seq first-file)
+        (if (= "region" (.getName file))
+          (if (.isDirectory file)
+            (let [region-file-seq (file-seq file)
                   region-file-names (map #(.getName ^File %) region-file-seq)]
               (zipmap region-file-names region-file-seq))
             nil)
@@ -131,10 +133,6 @@ length, containing the contents of the arrays up to that length."
       (loop [arrays [] next-byte-array (byte-array chunk-sector-size)]
         (.inflate inflater next-byte-array 0 chunk-sector-size)
         (let [bytes-read (.getBytesRead inflater)]
-          (debug "Inflator " offset
-                ": Read: " bytes-read
-                " Written " (.getBytesWritten inflater)
-                " Finished "(.finished inflater))
           (if (or (.finished inflater) (= bytes-read compressed-length))
             (let [bytes-written (.getBytesWritten inflater)]
               {:length bytes-written :data (expand-arrays arrays bytes-written)})
@@ -174,26 +172,8 @@ and the following additional keys if the chunk map has been generated
     (if (zero? data-location)
       chunk-map
       (let []
-        (info "Offset: " data-location " Sectors: " sectors " Timestamp: " (chunk-map :timestamp))
+        (debug "Offset: " data-location " Sectors: " sectors " Timestamp: " (chunk-map :timestamp))
         (merge chunk-map (read-chunk-data chunk-byte-array data-location (* sectors chunk-sector-size)))))))
-
-(defn read-region-file [file-descriptor file]
-  "Reads a region file, returning a region map of [x z] to chunk-maps. Contains side-effects"
-  (let [chunk-byte-array (slurp-binary-file! file)
-        loc-keys (region-loc-keys file-descriptor)
-        timestamp-header-offset (* chunks-per-region chunk-location-size)]
-      (loop [region-map {}
-           location-read-from 0
-           timestamp-read-from (* chunks-per-region chunk-location-size)
-           loc-keys-rem loc-keys]
-        (if (empty? loc-keys-rem)
-          region-map
-          (let [[x z] (peek loc-keys-rem)]
-            (recur (assoc region-map [x z]
-                          (read-chunk chunk-byte-array location-read-from timestamp-read-from))
-                   (long (calc-chunk-header-offset chunk-location-size x z))
-                   (+ timestamp-header-offset (calc-chunk-header-offset chunk-timestamp-size x z))
-                   (pop loc-keys-rem)))))))
 
 (defn region-coordinates [x y z]
   "Given x, y and z coordinates, returns the a map of the base coordinates of the region containing that position."
@@ -202,18 +182,44 @@ and the following additional keys if the chunk map has been generated
         [xRegion zRegion] (map #(bit-shift-right (val-map %) (shift-map %)) [:x :z])]
     {:x xRegion :z zRegion :y y}))
 
-(defn create-file-descriptor [x y z]
-  "Generates a region file name for the specified coordinates."
-  ; Region determined by right bit shifting x and z
-  (let [region-coords (region-coordinates x y z)]
-    (FileDescriptor. (format "r.%d.%d.mca" (:x region-coords) (:z region-coords))
-                     (:x region-coords)
-                     (:z region-coords))))
+(defn create-file-descriptor
+  ([filename]
+    (if-let [[x z] (map read-string (next (re-find #"r\.([0-9]+)\.([0-9]+)\.mca" filename)))]
+      (FileDescriptor. filename x z)))
+  ([x y z]
+    "Generates a region file name for the specified coordinates."
+    ; Region determined by right bit shifting x and z
+    (let [[x z] (map (region-coordinates x y z) [:x :z])]
+      (FileDescriptor. (format "r.%d.%d.mca" x z) x z))))
 
-(defn load-save-dir [^String dirname]
+(defn read-region-file
+  ([file-descriptor file]
+    "Reads a region file, returning a region map of [x z] to chunk-maps. Contains side-effects"
+    (let [chunk-byte-array (slurp-binary-file! file)
+          loc-keys (region-loc-keys file-descriptor)
+          timestamp-header-offset (* chunks-per-region chunk-location-size)]
+        (loop [region (Region. (:filename file-descriptor) (:xRegion file-descriptor) (:zRegion file-descriptor) {})
+             location-read-from 0
+             timestamp-read-from (* chunks-per-region chunk-location-size)
+             loc-keys-rem loc-keys]
+          (if (empty? loc-keys-rem)
+            region
+            (let [[x z] (peek loc-keys-rem)]
+              (recur (assoc region
+                            :chunks
+                            (assoc (:chunks region)
+                                   [x z]
+                                   (read-chunk chunk-byte-array location-read-from timestamp-read-from)))
+                     (long (calc-chunk-header-offset chunk-location-size x z))
+                     (+ timestamp-header-offset (calc-chunk-header-offset chunk-timestamp-size x z))
+                     (pop loc-keys-rem)))))))
+  ([^File file]
+    (read-region-file (create-file-descriptor (.getName file)) file)))
+
+(defn save-dir-files [^String dirname]
   (if-let [save-dir-files (verify-save-dir (File. dirname))]
     (if-let [region-dir-files (map-region-dir save-dir-files)]
       {:save-dir save-dir-files
-       :region-map region-dir-files}
+       :region-files region-dir-files}
       (info "Couldn't map region directory files for " dirname "."))
     nil))

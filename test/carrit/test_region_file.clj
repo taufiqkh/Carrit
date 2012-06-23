@@ -1,7 +1,8 @@
 (ns carrit.test-region-file
   (:use clojure.test
         carrit.region-file)
-  (:import java.util.Arrays))
+  (:import java.util.Arrays
+           java.io.File))
 
 ; TODO: This could no doubt be done more succinctly
 (deftest test-create-file-descriptor
@@ -27,3 +28,5 @@
     (is (= (:xRegion descriptor) 4))
     (is (= (:zRegion descriptor) -4))))
 
+(deftest test-read-region-file
+  (is (not (nil? (read-region-file (File. "test/resources/Test World/region/r.0.0.mca"))))))

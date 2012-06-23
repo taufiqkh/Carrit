@@ -44,7 +44,11 @@
                                                   0 0 0 1])) ; 4 initial bytes for array length
         extract (extract-from-byte-array type-int-array ^bytes chunk-bytes 0)]
     (is (= (+ int-length (* int-length length)) (:length extract)))
-    (is (= [2 1] (vec (:data extract))))))
+    (let [nbt (:data extract)
+          ^ints nbt-array (:data nbt)]
+      (is (= type-int-array (:type nbt)))
+      (is (= length (alength nbt-array)))
+      (is (Arrays/equals (int-array length [2 1]) nbt-array)))))
 
 (deftest integration-test-nbt
   "Full test with an NBT file"
