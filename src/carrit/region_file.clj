@@ -7,7 +7,7 @@
            java.util.zip.Inflater)
   (:use carrit.named-binary-tag
         carrit.byte-convert
-        [clojure.tools.logging :only (info debug)]))
+        [clojure.tools.logging :only (info debug warn)]))
 (set! *warn-on-reflection* true)
 ; Not idiomatic clojure; that will have to wait until I learn how to do things properly.
   
@@ -23,16 +23,21 @@
            (.read reader buffer)
            buffer))))
 
+(defn- map-filenames-to-files [files]
+  (zipmap (map #(.getName ^File %) files) files))
+
 (defn verify-save-dir [^File directory]
   "Verifies that a given directory contains the files/directories expected in a
 save game directory and returns a sequence of those files."
   (io!
     (info "Verifying directory " (.getPath directory))
     (if (.isDirectory directory)
-      (let [files (file-seq directory) filenames (set (map (fn [^File file] (.getName file)) files))]
-        (if (set/subset? expected-save-entries filenames)
+      (let [files (map-filenames-to-files (seq (.listFiles directory)))
+            filenames (set (keys files))
+            not-present (set/difference expected-save-entries filenames)]
+        (if (empty? not-present)
           files
-          nil))
+          (warn "Couldn't find all expected files in save directory" (.getPath directory) ":" not-present)))
       nil)))
 
 (defn map-region-dir [files]
@@ -44,7 +49,7 @@ files for that directory, mapped by file name."
       (io!
         (if (= "region" (.getName file))
           (if (.isDirectory file)
-            (let [region-file-seq (file-seq file)
+            (let [region-file-seq (seq (.listFiles file))
                   region-file-names (map #(.getName ^File %) region-file-seq)]
               (zipmap region-file-names region-file-seq))
             nil)
@@ -198,6 +203,8 @@ and the following additional keys if the chunk map has been generated
     (let [chunk-byte-array (slurp-binary-file! file)
           loc-keys (region-loc-keys file-descriptor)
           timestamp-header-offset (* chunks-per-region chunk-location-size)]
+      (info "Reading region for descriptor" file-descriptor)
+      (info "Chunk byte array" chunk-byte-array)
       (loop [region (Region. (:filename file-descriptor) (:xRegion file-descriptor) (:zRegion file-descriptor) {})
            location-read-from 0
            timestamp-read-from (* chunks-per-region chunk-location-size)
@@ -217,9 +224,9 @@ and the following additional keys if the chunk map has been generated
     (read-region-file (create-file-descriptor (.getName file)) file)))
 
 (defn save-dir-files [^String dirname]
-  (if-let [save-dir-files (verify-save-dir (File. dirname))]
-    (if-let [region-dir-files (map-region-dir save-dir-files)]
-      {:save-dir save-dir-files
-       :region-files region-dir-files}
+  (if-let [save-files (verify-save-dir (File. dirname))]
+    (if-let [region-files (map-region-dir (vals save-files))]
+      {:save-files save-files
+       :region-files region-files}
       (info "Couldn't map region directory files for " dirname "."))
     nil))

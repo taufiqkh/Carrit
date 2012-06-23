@@ -45,6 +45,19 @@
     (is (= (:filename descriptor) filename))
     (is (= (:xRegion descriptor) -98912))
     (is (= (:zRegion descriptor) -545))))
-  
-(deftest test-read-region-file
-  (is (not (nil? (read-region-file (File. "test/resources/Test World/region/r.0.0.mca"))))))
+
+(deftest test-save-dir-files
+  "Given a directory, ensure that the save file map returned is correct"
+  (let [dir "Whole New World"
+        files (save-dir-files dir)]
+    (is (not (nil? files)))
+    (let [save-files (:save-files files)
+          region-files (:region-files files)]
+      (is (not (nil? save-files)))
+      (is (= #{"data" "level.dat" "region"} (set (keys save-files))))
+      (is (not (nil? region-files)))
+      (is (empty? (drop-while #(contains? #{"r.0.0.mca", "r.-1.-1.mca", "r.-1.0.mca", "r.0.-1.mca"} %) (keys region-files)))))))
+
+; Disabled the following as the region file was too big
+;(deftest test-read-region-file
+;  (is (not (nil? (read-region-file (File. "test/resources/Test World/region/r.0.0.mca"))))))
