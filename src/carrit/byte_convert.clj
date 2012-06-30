@@ -10,7 +10,7 @@
 (def ^{:doc "Length of a double, in bytes"} double-length (/ Double/SIZE 8))
 
 (defmacro unsigned-byte-to-num [bval]
-  `(bit-and 0xff (int ~bval)))
+  `(bit-and 0xff (long ~bval)))
 
 (defn num-from-byte-array
   ([^bytes chunk-byte-array idx]

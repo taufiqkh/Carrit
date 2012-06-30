@@ -40,11 +40,13 @@
     (is (= (:filename descriptor) filename))
     (is (= (:xRegion descriptor) -123))
     (is (= (:zRegion descriptor) 0)))
-  (let [filename "r.-98912.-545.mca"
+  (let [x -98912
+        z -545
+        filename (str "r." x "." z ".mca")
         descriptor (create-file-descriptor filename)]
     (is (= (:filename descriptor) filename))
-    (is (= (:xRegion descriptor) -98912))
-    (is (= (:zRegion descriptor) -545))))
+    (is (= (:xRegion descriptor) x))
+    (is (= (:zRegion descriptor) z))))
 
 (deftest test-save-dir-files
   "Given a directory, ensure that the save file map returned is correct"

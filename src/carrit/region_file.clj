@@ -17,6 +17,14 @@
 
 (defrecord Region [filename x z chunks])
 
+(defrecord ChunkMap [data-offset sectors timestamp compressed-length compression-type nbt length])
+
+(defn- make-chunk-map
+  ([data-offset sectors timestamp compressed-length compression-type nbt length]
+    (ChunkMap. data-offset sectors timestamp compressed-length compression-type nbt length))
+  ([data-offset sectors timestamp]
+    (ChunkMap. data-offset sectors timestamp nil nil nil nil)))
+
 (defn slurp-binary-file! [^File file]
   (io! (with-open [reader (io/input-stream file)]
          (let [buffer (byte-array (.length file))]
@@ -58,11 +66,11 @@ files for that directory, mapped by file name."
 (def ^{:doc "Bitshift for x chunk to determine file name"} chunk-x-shift 5)
 (def
   ^{:doc "Number of chunks per region along the x axis. Offset multiplier for x location for chunk location headers"}
-   chunk-x-multiplier (int (math/pow 2 chunk-x-shift)))
+   chunk-x-multiplier (long (math/pow 2 chunk-x-shift)))
 (def ^{:doc "Bitshift for z chunk to determine file name"} chunk-z-shift 5)
 (def
   ^{:doc "Number of chunks per region along the z axis. Offset multiplier for z location for chunk location headers"}
-   chunk-z-multiplier (int (math/pow 2 chunk-z-shift)))
+   chunk-z-multiplier (long (math/pow 2 chunk-z-shift)))
 (def ^{:doc "Size of chunk location offset, in bytes"} chunk-location-offset-size 3)
 (def ^{:doc "Size of chunk location sector, in bytes"} chunk-location-sector-size 1)
 (def ^{:doc "Size of chunk location data, in bytes" }
@@ -111,7 +119,7 @@ must be at least the size of a chunk length header."
                  inner-loc-key-acc loc-key-acc]
             (if (empty? z-rem)
               inner-loc-key-acc
-              (recur x (next z-rem) (conj inner-loc-key-acc [(int (first x-rem)) (int (first z-rem))])))))))))
+              (recur x (next z-rem) (conj inner-loc-key-acc [(long (first x-rem)) (long (first z-rem))])))))))))
 
 (defn expand-arrays [arrays ^Integer length]
   "For a given sequence of arrays, returns a single array of the specified
@@ -150,30 +158,22 @@ length, containing the contents of the arrays up to that length."
         compression-type (num-from-byte-array chunk-byte-array offset chunk-compression-type-size)
         data-offset (+ offset chunk-data-lengh-header-size chunk-compression-type-size)
         inflated-data (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)]
-    {:compressed-length compressed-length,
-     :compression-type compression-type,
-     :data (nbt-from-byte-array (:data inflated-data) 0),
+    {:compressed-length. compressed-length
+     :compression-type compression-type
+     :nbt (nbt-from-byte-array (:data inflated-data) 0)
      :length (:length inflated-data)}))
 
 (defn read-chunk [chunk-byte-array location-offset timestamp-offset]
-  "Reads chunk data from the specified offsets, returning a chunk map with the
-following keys:
-  data-offset
-  sectors
-  timestamp
-and the following additional keys if the chunk map has been generated
-  compressed-length
-  compression-type
-  data
-  length"
+  "Reads chunk data from the specified offsets, returning a ChunkMap record. Note that :data-offset will be zero and
+:data will be nil if the chunk map has not been generated."
   (let [data-location (* (num-from-byte-array chunk-byte-array location-offset chunk-location-offset-size)
                          chunk-sector-size)
         sectors (num-from-byte-array chunk-byte-array
-                                           (+ location-offset chunk-location-offset-size)
-                                           chunk-location-sector-size)
-        chunk-map {:data-offset data-location
-                   :sectors sectors
-                   :timestamp (num-from-byte-array chunk-byte-array timestamp-offset chunk-timestamp-size)}]
+                                     (+ location-offset chunk-location-offset-size)
+                                     chunk-location-sector-size)
+        chunk-map (make-chunk-map data-location
+                                  sectors
+                                  (num-from-byte-array chunk-byte-array timestamp-offset chunk-timestamp-size))]
     (if (zero? data-location)
       chunk-map
       (let []
@@ -199,7 +199,8 @@ and the following additional keys if the chunk map has been generated
 
 (defn read-region-file
   ([file-descriptor file]
-    "Reads a region file, returning a region map of [x z] to chunk-maps. Contains side-effects"
+    "Reads a region file, returning a region map of [x z] to chunk-maps for all chunks that are present. Contains
+side-effects"
     (let [chunk-byte-array (slurp-binary-file! file)
           loc-keys (region-loc-keys file-descriptor)
           timestamp-header-offset (* chunks-per-region chunk-location-size)]
@@ -211,12 +212,11 @@ and the following additional keys if the chunk map has been generated
            loc-keys-rem loc-keys]
         (if (empty? loc-keys-rem)
           region
-          (let [[x z] (peek loc-keys-rem)]
+          (let [[x z] (peek loc-keys-rem)
+                chunk (read-chunk chunk-byte-array location-read-from timestamp-read-from)]
             (recur (assoc region
                           :chunks
-                          (assoc (:chunks region)
-                                 [x z]
-                                 (read-chunk chunk-byte-array location-read-from timestamp-read-from)))
+                          (assoc (:chunks region) [x z] chunk))
                    (long (calc-chunk-header-offset chunk-location-size x z))
                    (+ timestamp-header-offset (calc-chunk-header-offset chunk-timestamp-size x z))
                    (pop loc-keys-rem)))))))

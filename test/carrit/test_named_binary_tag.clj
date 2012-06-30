@@ -3,7 +3,8 @@
   (:use clojure.test
         carrit.byte-convert
         carrit.named-binary-tag
-        [carrit.region-file :only (slurp-binary-file!)])
+        [carrit.region-file :only (slurp-binary-file!)]
+        clojure.pprint)
   (:import java.io.File
            java.util.Arrays))
 
@@ -36,6 +37,57 @@
         (aset-byte test-array (+ idx 2) (aget test-string-array idx)))
       (is (not (nil? (extract-utf-8-name test-array 0))))))
 
+(deftest test-read-list-extract
+  "Read a list from a byte array"
+  (let [length 2
+        ^bytes chunk-bytes (byte-array (map unchecked-byte [type-compound
+                                                            0 0 0 length
+                                                            type-byte
+                                                            0 4 ; length of byte name
+                                                            116 101 115 116 ; "test"
+                                                            1 ; byte data
+                                                            type-string
+                                                            0 1 ; length of name
+                                                            97 ; "a"
+                                                            0 9 ; length of string data
+                                                            0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
+                                                            type-end
+                                                            type-int
+                                                            0 5 ; length of int name
+                                                            116 101 115 116 50 ; "test2"
+                                                            0 0 0 2 ; int data
+                                                            type-long
+                                                            0 5 ; length of long name
+                                                            116 101 115 116 51 ; "test3"
+                                                            1 2 3 4 5 6 7 8 ; 72623859790382856L
+                                                            type-end]))
+        extract (extract-from-byte-array type-list chunk-bytes 0)
+        nbt (:data extract)
+        nbt-data (:data nbt)]
+    (is (not (nil? extract)))
+    (is (not (nil? nbt-data)))
+    (let [first-compound-nbt (first nbt-data)
+          first-compound-data (:data first-compound-nbt)
+          second-compound-nbt (second nbt-data)
+          second-compound-data (:data second-compound-nbt)]
+      (is (nil? (:name first-compound-nbt)))
+      (is (nil? (:name second-compound-nbt)))
+      (is (= 2 (count (keys first-compound-data))))
+      (is (= 2 (count (keys second-compound-data))))
+      (let [test-byte-nbt (first-compound-data "test")
+            test-string-nbt (first-compound-data "a")
+            test-int-nbt (second-compound-data "test2")
+            test-long-nbt (second-compound-data "test3")]
+        (is (not (nil? test-byte-nbt)))
+        (is (= (byte 1) (:data test-byte-nbt)))
+        (is (not (nil? test-string-nbt)))
+        (is (= "shortTest" (:data test-string-nbt)))
+        (is (not (nil? test-int-nbt)))
+        (is (= (int 2) (:data test-int-nbt)))
+        (is (not (nil? test-long-nbt)))
+        (is (= (long 72623859790382856) (:data test-long-nbt)))
+    ))))
+
 (deftest test-read-int-array-extract
   "Read an IntArray extract from a byte array"
   (let [length 2
@@ -53,12 +105,12 @@
 (deftest test-read-compound-extract-nbt
   "Read a compound extract from a byte array"
   (let [^bytes chunk-bytes (byte-array (map unchecked-byte [type-compound
-                                                            0 4
+                                                            0 4 ; length of name
                                                             116 101 115 116 ; "test"
                                                             type-string
-                                                            0 1
-                                                            97
-                                                            0 9
+                                                            0 1 ; length of name
+                                                            97 ; "a"
+                                                            0 9 ; length of string data
                                                             0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
                                                             type-end]))
         extract (extract-nbt-from-byte-array chunk-bytes 0)
@@ -66,14 +118,33 @@
         children (:data compound-nbt)]
     (is (= (:name compound-nbt) "test"))
     (is (contains? children "a"))
-    (is (= (children "a")))))
+    (is (= (:data (children "a")) "shortTest"))))
 
 (deftest integration-test-nbt
   "Full test with an NBT file"
-  (let [test-file (File. "test/resources/test.nbt") chunk-byte-array (slurp-binary-file! test-file)]
-    (is (not (nil? (nbt-from-byte-array chunk-byte-array 0))))))
+  (let [test-file (File. "test/resources/test.nbt")
+        chunk-byte-array (slurp-binary-file! test-file)
+        root-nbt (nbt-from-byte-array chunk-byte-array 0)]
+    (is (not (nil? root-nbt)))))
 
 (deftest integration-test-big-nbt
   "Full test with a big NBT file"
-  (let [test-file (File. "test/resources/bigtest.nbt") chunk-byte-array (slurp-binary-file! test-file)]
-    (is (not (nil? (nbt-from-byte-array chunk-byte-array 0))))))
+  (let [test-file (File. "test/resources/bigtest.nbt")
+        chunk-byte-array (slurp-binary-file! test-file)
+        root-nbt (nbt-from-byte-array chunk-byte-array 0)
+        root-nbt-data (:data root-nbt)]
+    (is (not (nil? root-nbt)))
+    (is (= "Level" (:name root-nbt)))
+    (is (= 11 (count (keys (:data root-nbt)))))
+    (let [nested-compound ((:data root-nbt) "nested compound test")]
+      (is (not (nil? nested-compound))))
+    (let [nested-list-compound ((:data root-nbt) "listTest (compound)")]
+      (is (not (nil? nested-list-compound)))
+      (is (= 2 (count (:data nested-list-compound))))
+      (let [first-nbt (first (:data nested-list-compound))
+            second-nbt (second (:data nested-list-compound))]
+        (let [first-data (:data first-nbt)
+              first-created-on (first-data "created-on")
+              first-name (first-data "name")]
+          (is (not (nil? first-created-on)))
+          (is (not (nil? first-name))))))))
