@@ -104,7 +104,7 @@ Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
   (reify Chunk
     ; Ids of the blocks in this chunk.
     ; Get the Blocks tag from the chunk map's NBT data 
-    (getBlockIds [_] (retrieve-tag (:data (get-chunk-map world-data)) tag-blocks))
+    (getBlockIds [_] (get (:data (get-chunk-map world-data)) tag-blocks))
     ; Ancillary data for the blocks in this chunk, 4 bits per block.
     (getBlockData [_] (gen-dummy-data (repeat (/ chunk-size-y 2) 0)))
     ; Amount of sun- or moonlight hitting each block, 4 bits per block.

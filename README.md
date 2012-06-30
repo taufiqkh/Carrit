@@ -13,19 +13,20 @@ carrit requires log4j to be installed.
 Feature pull requests are not currently being accepted, as the design and direction has not yet been decided. Bug fixes and code refactoring may be considered - also happy for people to tell me a section of code is bad, as long as it's accompanied by tests and/or explanations.
 
 ## Use
----
+
 An example Java client is [CarritJava](https://github.com/taufiqkh/CarritJava), which demonstrates loading a save directory and extracting a chunk. 
 
 ### NBT
-The carrit.named-binary-tag namespace contains NBT functions that are usable. Given a byte array, they will generate NamedBinaryTag records that contain information in the following structure:
+The carrit.named-binary-tag namespace contains NBT functions that are usable. Given a byte array, they will generate `NamedBinaryTag` records that contain information in the following structure:
+
     NamedBinaryTag {
-      :type
-      :data (nil|<data dependent on type>)
-      [:name <string>]
-      [:child-type <type> (lists only)]
+      :type type
+      :data (nil|data dependent on type)
+      [:name String]
+      [:child-type type (lists only)]
     }
 
-As seen above, :name is optional, as its presence is dependent on the context. The `:child-type` value is only not nil for `type-list`. For all list types, the `:data` value contains a sequence of NamedBinaryTag records, while for compound types the `:data` value contains a map of names to NamedBinaryTag records.
+As seen above, `:name` is optional, as its presence is dependent on the context. The `:child-type` value is only not nil for `type-list`. For all list types, the `:data` value contains a sequence of `NamedBinaryTag` records, while for compound types the `:data` value contains a map of names to `NamedBinaryTag` records.
 
 Types are listed in `carrit.named-binary-tag/type-names`.
 
