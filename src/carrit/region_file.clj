@@ -204,8 +204,8 @@ side-effects"
     (let [chunk-byte-array (slurp-binary-file! file)
           loc-keys (region-loc-keys file-descriptor)
           timestamp-header-offset (* chunks-per-region chunk-location-size)]
-      (info "Reading region for descriptor" file-descriptor)
-      (info "Chunk byte array" chunk-byte-array)
+      (debug "Reading region for descriptor" file-descriptor)
+      (debug "Chunk byte array" chunk-byte-array)
       (loop [region (Region. (:filename file-descriptor) (:xRegion file-descriptor) (:zRegion file-descriptor) {})
            location-read-from 0
            timestamp-read-from (* chunks-per-region chunk-location-size)

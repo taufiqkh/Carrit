@@ -10,6 +10,15 @@
 
 (set! *warn-on-reflection* true)
 
+(defn verify-nbt
+  ([nbt type data name child-type]
+    (assert (not (nil? nbt)))
+    (assert (seq nbt))
+    (assert (contains? nbt :type :data))
+    )
+  ([nbt type data]
+    (verify-nbt nbt type data nil nil)))
+
 (defn reconstruct-utf-8 [^String string]
   (let [string-bytes (.getBytes string utf-8)]
   (read-utf-8-segment string-bytes 0 (alength string-bytes))))

@@ -133,7 +133,6 @@ expected to be prefixed by the length of the name."
 
 (defn traverse [nbt traversal-fn]
   (traversal-fn nbt)
-  (info "NBT" (type-name nbt) (str "\"" (if-let [name (:name nbt)] name "") "\""))
   (if (contains? #{type-byte-array type-list type-int-array} (:type nbt))
     (dorun (map #(traverse % traversal-fn) (:data nbt)))
     (if (= type-compound (:type nbt))
