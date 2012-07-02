@@ -12,10 +12,16 @@
 
 (defn verify-nbt
   ([nbt type data name child-type]
-    (assert (not (nil? nbt)))
-    (assert (seq nbt))
-    (assert (contains? nbt :type :data))
+    (is (not (nil? nbt)))
+    (is (not-empty nbt))
+    (is (every? (partial contains? nbt) [:type :data]))
+    (is (= name (:name nbt)))
+    (is (= child-type (:child-type nbt)))
+    (if (contains? #{type-byte type-short type-int type-long type-float type-double} type)
+      (is (= data (:data nbt))))
     )
+  ([nbt type data name]
+    (verify-nbt nbt type data name nil))
   ([nbt type data]
     (verify-nbt nbt type data nil nil)))
 
@@ -45,6 +51,12 @@
       (doseq [idx (range (alength test-string-array))]
         (aset-byte test-array (+ idx 2) (aget test-string-array idx)))
       (is (not (nil? (extract-utf-8-name test-array 0))))))
+
+(deftest test-read-double-extract
+  "Read a double from a byte array"
+  (let [nbt-bytes (byte-array (map unchecked-byte [0x43 0x30 0x89 0x15 0x53 0xD5 0xE8 0x22]))
+        extract (extract-from-byte-array type-double nbt-bytes 0)]
+    (verify-nbt (:data extract) type-double 4.654324321216546E15)))
 
 (deftest test-read-list-extract
   "Read a list from a byte array"
@@ -87,14 +99,10 @@
             test-string-nbt (first-compound-data "a")
             test-int-nbt (second-compound-data "test2")
             test-long-nbt (second-compound-data "test3")]
-        (is (not (nil? test-byte-nbt)))
-        (is (= (byte 1) (:data test-byte-nbt)))
-        (is (not (nil? test-string-nbt)))
-        (is (= "shortTest" (:data test-string-nbt)))
-        (is (not (nil? test-int-nbt)))
-        (is (= (int 2) (:data test-int-nbt)))
-        (is (not (nil? test-long-nbt)))
-        (is (= (long 72623859790382856) (:data test-long-nbt)))
+        (verify-nbt test-byte-nbt type-byte 1 "test")
+        (verify-nbt test-string-nbt type-string "shortTest" "a")
+        (verify-nbt test-int-nbt type-int (int 2) "test2")
+        (verify-nbt test-long-nbt type-long (long 72623859790382856) "test3")
     ))))
 
 (deftest test-read-int-array-extract

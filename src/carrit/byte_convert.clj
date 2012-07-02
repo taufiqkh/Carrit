@@ -32,7 +32,14 @@ length."
 floating-point \"single format\" bit layout. The length of the array must
 be at least as long as a float."
   [from-byte-array start-index]
-  (Float/intBitsToFloat (int (num-from-byte-array from-byte-array start-index float-length))))
+  (Float/intBitsToFloat (num-from-byte-array from-byte-array start-index float-length)))
+
+(defn double-from-byte-array
+  "Returns a float from a big-endian byte array conforming to IEEE 754
+floating-point \"double format\" bit layout. The length of the array must
+be at least as long as a double."
+  [from-byte-array start-index]
+  (Double/longBitsToDouble (long (num-from-byte-array from-byte-array start-index double-length))))
 
 (defn copy-from-byte-array
   "Copies bytes from an array and returns them as a new array."

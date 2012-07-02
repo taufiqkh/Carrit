@@ -2,6 +2,11 @@
   (:use clojure.test
         carrit.byte-convert))
 
+(defn- byte-arr
+  "Creates a byte array with the unchecked bytes from the given vector"
+  [vec]
+  (byte-array (map unchecked-byte vec)))
+
 (deftest test-unsigned-byte-to-num
   (let [large-unsigned (unchecked-byte 0xE7)
         small-unsigned (unchecked-byte 0x03)]
@@ -9,7 +14,7 @@
     (is (= 3 (unsigned-byte-to-num small-unsigned)))))
 
 (deftest test-short-from-byte-array
-  (let [test-array (byte-array (map unchecked-byte [0xF1 0x01 0xF7 0x00 0x00 0xFF 0xFF 0x00]))
+  (let [test-array (byte-arr [0xF1 0x01 0xF7 0x00 0x00 0xFF 0xFF 0x00])
         verify-short (fn [val idx] (is (= val (num-from-byte-array test-array idx short-length))))]
     (verify-short 503 1)
     (verify-short -3839 0)
@@ -18,25 +23,25 @@
     (verify-short -1 5)))
 
 (deftest test-int-from-byte-array
-  (let [test-array (byte-array (map unchecked-byte [0xF1 0x01 0xE7 0x03 0x04]))]
+  (let [test-array (byte-arr[0xF1 0x01 0xE7 0x03 0x04])]
     (is (= 31916804 (num-from-byte-array test-array 1 int-length)))
     (is (= -251533565 (num-from-byte-array test-array 0 int-length)))))
 
 (deftest test-long-from-byte-array
-  (let [test-array (byte-array (map unchecked-byte [0xF1 0x00 0xE7 0x03 0x04 0x00 0xFF 0xFF 0xFF]))]
+  (let [test-array (byte-arr [0xF1 0x00 0xE7 0x03 0x04 0x00 0xFF 0xFF 0xFF])]
     (is (= 65024035351691263 (num-from-byte-array test-array 1 long-length)))
     (is (= -1080609910430826497 (num-from-byte-array test-array 0 long-length)))))
 
-(deftest test-float-from-byte-array
-  (let [positive-infinity (byte-array (map unchecked-byte [0xF1 0x7F 0x80 0x00 0x00 0xFF]))
-        negative-infinity (byte-array (map unchecked-byte [0x07 0xFF 0x80 0x00 0x00 0xF6]))
-        nan (byte-array (map unchecked-byte [0x7F 0xC0 0x00 0x00 0xF3]))
-        nan2 (byte-array (map unchecked-byte [0xFF 0x80 0xF0 0xC1 0x0F]))
-        nan3 (byte-array (map unchecked-byte [0xFF 0xFF 0xFF 0xFF]))
-        min-value (byte-array (map unchecked-byte [0x00 0x00 0x00 0x01]))
-        max-value (byte-array (map unchecked-byte [0x7F 0x7F 0xFF 0xFF]))
-        min-normal (byte-array (map unchecked-byte [0x00 0x80 0x00 0x00]))
-        val (byte-array (map unchecked-byte [0x3E 0x20 0x00 0x00]))]
+(deftest test-float-values-from-byte-array
+  (let [positive-infinity (byte-arr [0xF1 0x7F 0x80 0x00 0x00 0xFF])
+        negative-infinity (byte-arr [0x07 0xFF 0x80 0x00 0x00 0xF6])
+        nan (byte-arr [0x7F 0xC0 0x00 0x00 0xF3])
+        nan2 (byte-arr [0xFF 0x80 0xF0 0xC1 0x0F])
+        nan3 (byte-arr [0xFF 0xFF 0xFF 0xFF])
+        min-value (byte-arr [0x00 0x00 0x00 0x01])
+        max-value (byte-arr [0x7F 0x7F 0xFF 0xFF])
+        min-normal (byte-arr [0x00 0x80 0x00 0x00])
+        val (byte-arr [0x3E 0x20 0x00 0x00])]
     (is (= Float/POSITIVE_INFINITY (float-from-byte-array positive-infinity 1)))
     (is (= Float/NEGATIVE_INFINITY (float-from-byte-array negative-infinity 1)))
     (is (Float/isNaN (float-from-byte-array nan 0)))
@@ -46,3 +51,36 @@
     (is (= Float/MAX_VALUE (float-from-byte-array max-value 0)))
     (is (= Float/MIN_NORMAL (float-from-byte-array min-normal 0)))
     (is (= 0.15625 (float-from-byte-array val 0)))))
+
+(deftest test-float-from-extended-byte-array
+  (let [val-pre-ff (byte-arr [0xFF 0x3E 0x20 0x00 0x00])
+        val-pre-00 (byte-arr [0x00 0x3E 0x20 0x00 0x00])
+        val-post-ff (byte-arr [0x3E 0x20 0x00 0x00 0xFF])
+        val-post-00 (byte-arr [0x3E 0x20 0x00 0x00 0x00])
+        val-pre-post (byte-arr [0xF0 0x3E 0x20 0x00 0x00 0x00 0xFF])
+        verify-float (fn [arr idx] (is (= 0.15625 (float-from-byte-array arr idx))))]
+    (verify-float val-pre-ff 1)
+    (verify-float val-pre-00 1)
+    (verify-float val-post-ff 0)
+    (verify-float val-post-00 0)
+    (verify-float val-pre-post 1)))
+
+(deftest test-double-from-byte-array
+  (let [positive-infinity (byte-arr [0x7F 0xF0 0x00 0x00 0x00 0x00 0x00 0x00])
+        negative-infinity (byte-arr [0xFF 0xF0 0x00 0x00 0x00 0x00 0x00 0x00])
+        nan (byte-arr [0x7F 0xF8 0x00 0x00 0x00 0x00 0x00 0x00])
+        nan2 (byte-arr [0x7F 0xFF 0xA0 0x00 0xDE 0xAD 0xBE 0xEF])
+        nan3 (byte-arr [0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF])
+        min-value (byte-arr [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x01])
+        max-value (byte-arr [0x7F 0xEF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF])
+        min-normal (byte-arr [0x00 0x10 0x00 0x00 0x00 0x00 0x00 0x00])
+        val (byte-arr [0x43 0x30 0x89 0x15 0x53 0xD5 0xE8 0x22])]
+    (is (= Double/POSITIVE_INFINITY (double-from-byte-array positive-infinity 0)))
+    (is (= Double/NEGATIVE_INFINITY (double-from-byte-array negative-infinity 0)))
+    (is (Double/isNaN (double-from-byte-array nan 0)))
+    (is (Double/isNaN (double-from-byte-array nan2 0)))
+    (is (Double/isNaN (double-from-byte-array nan3 0)))
+    (is (= Double/MIN_VALUE (double-from-byte-array min-value 0)))
+    (is (= Double/MAX_VALUE (double-from-byte-array max-value 0)))
+    (is (= Double/MIN_NORMAL (double-from-byte-array min-normal 0)))
+    (is (= 4.654324321216546E15 (double-from-byte-array val 0)))))
