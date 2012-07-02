@@ -52,40 +52,45 @@
 (defrecord ^{:doc "Extract from a byte array, containing copied data and the read length, in bytes"}
             Extract [data length])
 
-(defn read-utf-8-segment [^bytes chunk-bytes idx byte-length]
+(defn read-utf-8-segment
   "Reads the specified number of bytes at the given index in the array and
 returns it as a UTF-8 string."
+  [^bytes chunk-bytes idx byte-length]
   (let [^bytes buffer (copy-from-byte-array chunk-bytes idx byte-length)]
     (String. buffer #^String utf-8)))
 
-(defn extract-utf-8-name [^bytes chunk-bytes idx]
+(defn extract-utf-8-name
   "Read a tag name from the byte array at the specified index, returning the name and length, in bytes. The tag name is
 expected to be prefixed by the length of the name."
+  [^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx short-length)]
     (Extract. (read-utf-8-segment chunk-bytes (+ idx short-length) length) length)))
 
-; Given a byte array, read the extract for the specified type and return that
-; extract and the length, in bytes, of the section that was read.
-(defmulti extract-from-byte-array (fn [tag-type chunk-bytes idx] tag-type))
+(defmulti extract-from-byte-array
+"Given a byte array, read the extract for the specified type and return that
+extract and the length, in bytes, of the section that was read."
+  (fn [tag-type chunk-bytes idx] tag-type))
 
 (defn extract-nbt-from-byte-array
-  ([^bytes chunk-bytes idx]
-    "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
-    (let [nbt-type (unsigned-byte-to-num (aget chunk-bytes idx))]
-      ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
-      (if (= (long nbt-type) type-end)
-        (Extract. (make-named-binary-tag nbt-type nil) 1)
-        (let [name-idx (inc idx)
-              nbt-name (extract-utf-8-name chunk-bytes name-idx)
-              ; Extract index starts after type, name length and name
-              extract (extract-from-byte-array nbt-type chunk-bytes (+ idx 1 short-length (:length nbt-name)))
-              nbt (:data extract)]
-          ; (logging/debug nbt-name-data)
-          (Extract. (assoc nbt :name (:data nbt-name))
-                    ; tag id length + "name length" length + name length + extract length
-                    (+ 1 short-length (:length nbt-name) (:length extract))))))))
+  "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
+  [^bytes chunk-bytes idx]
+  (let [nbt-type (unsigned-byte-to-num (aget chunk-bytes idx))]
+    ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
+    (if (= (long nbt-type) type-end)
+      (Extract. (make-named-binary-tag nbt-type nil) 1)
+      (let [name-idx (inc idx)
+            nbt-name (extract-utf-8-name chunk-bytes name-idx)
+            ; Extract index starts after type, name length and name
+            extract (extract-from-byte-array nbt-type chunk-bytes (+ idx 1 short-length (:length nbt-name)))
+            nbt (:data extract)]
+        ; (logging/debug nbt-name-data)
+        (Extract. (assoc nbt :name (:data nbt-name))
+                  ; tag id length + "name length" length + name length + extract length
+                  (+ 1 short-length (:length nbt-name) (:length extract)))))))
 
-(defn nbt-from-byte-array [^bytes chunk-bytes idx]
+(defn nbt-from-byte-array
+  "Given a byte array, reads the NBT and all child NBTs from the specified index."
+  [^bytes chunk-bytes idx]
   (:data (extract-nbt-from-byte-array chunk-bytes idx)))
 
 (defmethod extract-from-byte-array type-byte [tag-type ^bytes chunk-bytes idx]
@@ -137,7 +142,9 @@ expected to be prefixed by the length of the name."
   (let [type-length (get type-lengths (int tag-type))]
     (Extract. (make-named-binary-tag tag-type (num-from-byte-array chunk-bytes idx type-length)) type-length)))
 
-(defn traverse [nbt traversal-fn]
+(defn traverse
+  "Traverses the given NBT, executing traversal-fn for side effects at each node. Returns nil"
+  [nbt traversal-fn]
   (traversal-fn nbt)
   (if (contains? #{type-byte-array type-list type-int-array} (:type nbt))
     (dorun (map #(traverse % traversal-fn) (:data nbt)))

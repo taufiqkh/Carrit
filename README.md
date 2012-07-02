@@ -26,7 +26,7 @@ The carrit.named-binary-tag namespace contains NBT functions that are usable. Gi
       [:child-type type (lists only)]
     }
 
-As seen above, `:name` is optional, as its presence is dependent on the context. The `:child-type` value is only not nil for `type-list`. For all list types, the `:data` value contains a sequence of `NamedBinaryTag` records, while for compound types the `:data` value contains a map of names to `NamedBinaryTag` records.
+As seen above, `:name` is optional, as its presence is dependent on the context. The `:child-type` value is only not nil for `type-list`. For all list types, the `:data` value contains a sequence of `NamedBinaryTag` records, while for compound types the `:data` value contains a map of names to `NamedBinaryTag` records. It's somewhat clumsy to work with but I'd like to simplify it in the future once I'm more familiar with the language.
 
 Types are listed in `carrit.named-binary-tag/type-names`.
 
@@ -35,9 +35,14 @@ Types are listed in `carrit.named-binary-tag/type-names`.
 Still to do are:
 
 * Creation of NBT data
-* Completing 
+* Completing the chunk interface
 * Saving chunks
-* Fleshing out the concurrency model
+* Properly figuring out the concurrency model
+* Better data checks
+* Error handling. Haven't figured out the idiomatic Clojure way of doing this yet.
 
 Possible improvements:
+
 * Less unwieldy NBT data
+* Removal of extracts; they are only there as an interim measure until I can restructure in such a way that I don't need to pass back both length and data.
+* Rework of the file read->NBT creation pipeline, reducing array copying where possible. This will depend on what priority is placed on improving performance in this area.
