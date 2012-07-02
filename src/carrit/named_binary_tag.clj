@@ -71,7 +71,7 @@ expected to be prefixed by the length of the name."
 (defn extract-nbt-from-byte-array
   ([^bytes chunk-bytes idx]
     "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
-    (let [nbt-type (num-from-byte-array chunk-bytes idx)]
+    (let [nbt-type (unsigned-byte-to-num (aget chunk-bytes idx))]
       ; (logging/debug (apply format "nbt type is %d, index %d" [nbt-type idx]))
       (if (= (long nbt-type) type-end)
         (Extract. (make-named-binary-tag nbt-type nil) 1)
@@ -103,7 +103,7 @@ expected to be prefixed by the length of the name."
               (+ short-length length))))
 
 (defmethod extract-from-byte-array type-list [tag-type ^bytes chunk-bytes idx]
-  (let [list-tag-type (num-from-byte-array chunk-bytes idx)
+  (let [list-tag-type (unsigned-byte-to-num (aget chunk-bytes idx))
         list-length (num-from-byte-array chunk-bytes (inc idx) int-length)]
     (loop [num-left list-length next-idx (+ idx 1 int-length) acc []]
       (if (zero? num-left)

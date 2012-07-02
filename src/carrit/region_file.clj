@@ -78,7 +78,7 @@ files for that directory, mapped by file name."
   (+ chunk-location-offset-size chunk-location-sector-size))
 (def ^{:doc "Size of a chunk sector in bytes"} chunk-sector-size 4096)
 (def ^{:doc "Size of chunk timestamp data, in bytes"} chunk-timestamp-size 4)
-(def ^{:doc "Size of the length header for chunk data, in bytes"} chunk-data-lengh-header-size 4)
+(def ^{:doc "Size of the length header for chunk data, in bytes"} chunk-data-length-header-size 4)
 (def ^{:doc "Size of the compression type header, in bytes"} chunk-compression-type-size 1)
 (def ^{:doc "Number of chunks in a file"} chunks-per-region (* chunk-x-multiplier chunk-z-multiplier))
 
@@ -96,7 +96,7 @@ must be at least the size of a timestamp."
 (defn chunk-length-byte-array [^bytes chunk-length-byte-array]
   "Returns the chunk length from the specified chunk header array. The array
 must be at least the size of a chunk length header."
-  (num-from-byte-array chunk-length-byte-array 0 chunk-data-lengh-header-size))
+  (num-from-byte-array chunk-length-byte-array 0 chunk-data-length-header-size))
 
 (defn chunk-range [region shift]
   "Derives a chunk coordinate range from a region"
@@ -154,9 +154,9 @@ length, containing the contents of the arrays up to that length."
 (defn read-chunk-data [chunk-byte-array offset alloc-length]
   {:pre [(>= offset 0) (> alloc-length 0)]}
   "Reads the chunk header and data at a specified offset. Contains side effects."
-  (let [compressed-length (num-from-byte-array chunk-byte-array offset chunk-data-lengh-header-size)
+  (let [compressed-length (num-from-byte-array chunk-byte-array offset chunk-data-length-header-size)
         compression-type (num-from-byte-array chunk-byte-array offset chunk-compression-type-size)
-        data-offset (+ offset chunk-data-lengh-header-size chunk-compression-type-size)
+        data-offset (+ offset chunk-data-length-header-size chunk-compression-type-size)
         inflated-data (inflate-chunk-data chunk-byte-array data-offset (dec compressed-length) alloc-length)]
     {:compressed-length. compressed-length
      :compression-type compression-type
