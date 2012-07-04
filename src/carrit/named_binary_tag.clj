@@ -7,18 +7,18 @@
 
 ; TODO: Add mapping to clojure entities
 
-(def ^{:doc "Tag end, denoting the end of a compound tag list."} type-end 0)
-(def ^{:doc "Single, signed byte."} type-byte 1)
-(def ^{:doc "Signed short, 16 bits."} type-short 2)
-(def ^{:doc "Signed int, 32 bits."} type-int 3)
-(def ^{:doc "Signed long, 64 bits."} type-long 4)
-(def ^{:doc "Float, 32 bits IEEE 754-2008."} type-float 5)
-(def ^{:doc "Double, 64 bits IEEE 754-2008."} type-double 6)
-(def ^{:doc "Byte array of unspecified format."} type-byte-array 7)
-(def ^{:doc "String."} type-string 8)
-(def ^{:doc "Sequential list of a specified type."} type-list 9)
-(def ^{:doc "Compound tag, which is a sequential list of uniquely named tags."} type-compound 10)
-(def ^{:doc "Length-prefixed array of signed, 4 byte integers"} type-int-array 11)
+(def ^:const ^{:doc "Tag end, denoting the end of a compound tag list."} type-end 0)
+(def ^:const ^{:doc "Single, signed byte."} type-byte 1)
+(def ^:const ^{:doc "Signed short, 16 bits."} type-short 2)
+(def ^:const ^{:doc "Signed int, 32 bits."} type-int 3)
+(def ^:const ^{:doc "Signed long, 64 bits."} type-long 4)
+(def ^:const ^{:doc "Float, 32 bits IEEE 754-2008."} type-float 5)
+(def ^:const ^{:doc "Double, 64 bits IEEE 754-2008."} type-double 6)
+(def ^:const ^{:doc "Byte array of unspecified format."} type-byte-array 7)
+(def ^:const ^{:doc "String."} type-string 8)
+(def ^:const ^{:doc "Sequential list of a specified type."} type-list 9)
+(def ^:const ^{:doc "Compound tag, which is a sequential list of uniquely named tags."} type-compound 10)
+(def ^:const ^{:doc "Length-prefixed array of signed, 4 byte integers"} type-int-array 11)
 
 (def type-lengths (hash-map type-end 1
                    type-byte 1
@@ -27,12 +27,6 @@
                    type-long long-length
                    type-float float-length
                    type-double double-length))
-
-(def ^{:doc "UTF-8 encoding" :tag String} utf-8 "UTF-8")
-
-(defrecord NamedBinaryTag [type data name child-type])
-
-(defn make-named-binary-tag [type data & opts] (NamedBinaryTag. (num type) data (first opts) (second opts)))
 
 (def type-names (hash-map type-end "End"
                    type-byte "Byte"
@@ -46,6 +40,17 @@
                    type-list "List"
                    type-compound "Compound"
                    type-int-array "Int Array"))
+
+(def ^{:doc "UTF-8 encoding" :tag String} utf-8 "UTF-8")
+
+(defrecord NamedBinaryTag [type data name child-type])
+
+(defn make-named-binary-tag
+  "Creates a named binary tag with the given options. Type and data are
+mandatory, while name and child-type default to nil. Child-type must be
+specified for all lists."
+  [type data & opts]
+    (NamedBinaryTag. (num type) data (first opts) (second opts)))
 
 (defn type-name [nbt] (get type-names (:type nbt)))
 
@@ -69,7 +74,7 @@ expected to be prefixed by the length of the name."
 (defmulti extract-from-byte-array
 "Given a byte array, read the extract for the specified type and return that
 extract and the length, in bytes, of the section that was read."
-  (fn [tag-type chunk-bytes idx] tag-type))
+  (fn [tag-type _ _] tag-type))
 
 (defn extract-nbt-from-byte-array
   "Reads an NBT from the given chunk-bytes byte array, starting at the specified index."
@@ -94,12 +99,12 @@ extract and the length, in bytes, of the section that was read."
   (:data (extract-nbt-from-byte-array chunk-bytes idx)))
 
 (defmethod extract-from-byte-array type-byte [tag-type ^bytes chunk-bytes idx]
-  (Extract. (make-named-binary-tag type-byte (aget chunk-bytes idx) nil) 1))
+  (Extract. (make-named-binary-tag tag-type (aget chunk-bytes idx) nil) 1))
 
 (defmethod extract-from-byte-array type-byte-array [tag-type ^bytes chunk-bytes idx]
   (let [length (num-from-byte-array chunk-bytes idx int-length)
         start-idx (+ idx int-length)]
-    (Extract. (make-named-binary-tag type-byte-array (copy-from-byte-array chunk-bytes start-idx length))
+    (Extract. (make-named-binary-tag tag-type (copy-from-byte-array chunk-bytes start-idx length))
               (+ int-length length))))
 
 (defmethod extract-from-byte-array type-string [tag-type ^bytes chunk-bytes idx]
@@ -112,7 +117,7 @@ extract and the length, in bytes, of the section that was read."
         list-length (num-from-byte-array chunk-bytes (inc idx) int-length)]
     (loop [num-left list-length next-idx (+ idx 1 int-length) acc []]
       (if (zero? num-left)
-        (Extract. (make-named-binary-tag tag-type acc) (- next-idx idx))
+        (Extract. (make-named-binary-tag tag-type acc nil list-tag-type) (- next-idx idx))
         (let [extract-data (extract-from-byte-array list-tag-type chunk-bytes next-idx)]
           (recur (dec num-left) (+ next-idx (:length extract-data)) (conj acc (:data extract-data))))))))
 

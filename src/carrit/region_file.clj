@@ -92,13 +92,6 @@ chunk header in a region file"
   [header-size x z]
   (* header-size (+ (mod x chunk-x-multiplier) (* (mod z chunk-z-multiplier) chunk-x-multiplier))))
 
-; TODO: probably not needed, call underlying function directly
-(defn chunk-timestamp
-  "Returns a chunk location from the specified timestamp byte array. The array
-must be at least the size of a timestamp."
-  [^bytes timestamp-byte-array]
-  (num-from-byte-array timestamp-byte-array 0 chunk-timestamp-size))
-
 (defn chunk-length-byte-array
   "Returns the chunk length from the specified chunk header array. The array
 must be at least the size of a chunk length header."
@@ -156,11 +149,12 @@ length, containing the contents of the arrays up to that length."
       (.setInput inflater chunk-byte-array offset compressed-length)
       (loop [arrays [] next-byte-array (byte-array chunk-sector-size)]
         (.inflate inflater next-byte-array 0 chunk-sector-size)
-        (let [bytes-read (.getBytesRead inflater)]
+        (let [bytes-read (.getBytesRead inflater)
+              next-arrays (conj arrays next-byte-array)]
           (if (or (.finished inflater) (= bytes-read compressed-length))
             (let [bytes-written (.getBytesWritten inflater)]
-              {:length bytes-written :data (expand-arrays arrays bytes-written)})
-            (recur (conj arrays next-byte-array) (byte-array chunk-sector-size))))))))
+              {:length bytes-written :data (expand-arrays next-arrays bytes-written)})
+            (recur next-arrays (byte-array chunk-sector-size))))))))
 
 (defn read-chunk-data
   "Reads the chunk header and data at a specified offset. Contains side effects."

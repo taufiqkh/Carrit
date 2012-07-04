@@ -3,11 +3,11 @@
 
 (set! *warn-on-reflection* true)
 
-(def ^{:doc "Length of a short, in bytes"} short-length (/ Short/SIZE 8))
-(def ^{:doc "Length of an int, in bytes"} int-length (/ Integer/SIZE 8))
-(def ^{:doc "Length of a long, in bytes"} long-length (/ Long/SIZE 8))
-(def ^{:doc "Length of a float, in bytes"} float-length (/ Float/SIZE 8))
-(def ^{:doc "Length of a double, in bytes"} double-length (/ Double/SIZE 8))
+(def ^:const ^{:doc "Length of a short, in bytes"} short-length (/ Short/SIZE 8))
+(def ^:const ^{:doc "Length of an int, in bytes"} int-length (/ Integer/SIZE 8))
+(def ^:const ^{:doc "Length of a long, in bytes"} long-length (/ Long/SIZE 8))
+(def ^:const ^{:doc "Length of a float, in bytes"} float-length (/ Float/SIZE 8))
+(def ^:const ^{:doc "Length of a double, in bytes"} double-length (/ Double/SIZE 8))
 
 (defmacro unsigned-byte-to-num
   "Returns an unsigned number from an unsigned byte."
@@ -19,11 +19,11 @@
 to the specified length. The length of the array must be at least the specified
 length."
   [^bytes from-byte-array start-index length]
-  {:pre [(>= (alength from-byte-array) (dec (+ start-index length)))]}
+  {:pre [(>= (alength from-byte-array) (+ start-index length))]}
   (let [end-index (dec (+ start-index length))] 
     ; Bit shift left by byte size for each digit until we reach the end
     (reduce bit-or
-            (bit-shift-left (aget from-byte-array start-index) (* (dec length) 8))
+            (bit-shift-left (long (aget from-byte-array start-index)) (* (dec length) 8))
             (for [i (range (inc start-index) (inc end-index))]
               (bit-shift-left (unsigned-byte-to-num (aget from-byte-array i)) (* (- end-index i) 8))))))
 

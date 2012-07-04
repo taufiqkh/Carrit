@@ -27,19 +27,21 @@
 
 (def ^{:doc "Default sea level for dummy terrain generation"} default-sea-level 63)
 
-(defn get-chunk-map [world-data x z]
+(defn get-chunk-map
   "Given world data, returns the chunk map containing the specified coordinates"
+  [world-data x z]
   ([x z] ([x z] world-data)))
 
 (defn gen-dummy-block-ids []
   (concat (repeat default-sea-level (byte 1)) (repeat (- chunk-size-y default-sea-level) (byte 0))))
 
-(defn gen-dummy-data [column]
+(defn gen-dummy-data
   "Generate dummy blocks for the chunk, distributed according to the following:
 Blocks[ y + z * ChunkSizeY(=128) + x * ChunkSizeY(=128) * ChunkSizeZ(=16) ]"
+  [column]
   (byte-array (reduce concat [] (repeat (* chunk-size-x chunk-size-z) column))))
 
-(defn dummy-chunk-block [chunk-data x y z blockTypeId skyLight]
+(defn dummy-chunk-block [_ x y z blockTypeId skyLight] ; chunk-data x y z blockTypeId skyLight
   (reify ChunkBlock
     (getBlockTypeId [_] blockTypeId)
     (getBlockData [_] (byte 0))
