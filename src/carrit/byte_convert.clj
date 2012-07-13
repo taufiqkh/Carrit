@@ -27,14 +27,32 @@ length."
             (for [i (range (inc start-index) (inc end-index))]
               (bit-shift-left (unsigned-byte-to-num (aget from-byte-array i)) (* (- end-index i) 8))))))
 
-(defn float-from-byte-array
+(defn short-as-byte-array
+  "Returns the byte array representation of a short, in Java format."
+  [short-val]
+  (let [return-arr (byte-array short-length)]
+    (aset-byte return-arr 0 (unchecked-byte (bit-shift-right short-val 8)))
+    (aset-byte return-arr 1 (unchecked-byte short-val))
+    return-arr))
+
+(defn int-as-byte-array
+  "Returns the byte array representation of an integer, in Java format."
+  [int-val]
+  (let [return-arr (byte-array int-length)]
+    (aset-byte return-arr 0 (unchecked-byte (bit-shift-right int-val 24)))
+    (aset-byte return-arr 1 (unchecked-byte (bit-shift-right int-val 16)))
+    (aset-byte return-arr 2 (unchecked-byte (bit-shift-right int-val 8)))
+    (aset-byte return-arr 3 (unchecked-byte int-val))
+    return-arr))
+
+(defn byte-array-to-float
   "Returns a float from a big-endian byte array conforming to IEEE 754
 floating-point \"single format\" bit layout. The length of the array must
 be at least as long as a float."
   [from-byte-array start-index]
   (Float/intBitsToFloat (num-from-byte-array from-byte-array start-index float-length)))
 
-(defn double-from-byte-array
+(defn byte-array-to-double
   "Returns a float from a big-endian byte array conforming to IEEE 754
 floating-point \"double format\" bit layout. The length of the array must
 be at least as long as a double."

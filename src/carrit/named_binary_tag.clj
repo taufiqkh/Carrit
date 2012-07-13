@@ -138,14 +138,33 @@ extract and the length, in bytes, of the section that was read."
     (Extract. (make-named-binary-tag tag-type data) (+ int-length (* int-length length)))))
 
 (defmethod extract-from-byte-array type-float [tag-type ^bytes chunk-bytes idx]
-  (Extract. (make-named-binary-tag tag-type (float-from-byte-array chunk-bytes idx)) float-length))
+  (Extract. (make-named-binary-tag tag-type (byte-array-to-float chunk-bytes idx)) float-length))
 
 (defmethod extract-from-byte-array type-double [tag-type ^bytes chunk-bytes idx]
-  (Extract. (make-named-binary-tag tag-type (double-from-byte-array chunk-bytes idx)) double-length))
+  (Extract. (make-named-binary-tag tag-type (byte-array-to-double chunk-bytes idx)) double-length))
 
 (defmethod extract-from-byte-array :default [tag-type ^bytes chunk-bytes idx]
   (let [type-length (get type-lengths (int tag-type))]
     (Extract. (make-named-binary-tag tag-type (num-from-byte-array chunk-bytes idx type-length)) type-length)))
+
+(defn collect-pre-output [nbt output]
+  (let [type (:type nbt)]
+    nil))
+
+(defn collect-pre-named-output [nbt output]
+  (let [type (:type nbt)
+        name (:name nbt)
+        data (:data nbt)]
+    (if (= type type-compound)
+      (mapcat collect-pre-output data))))
+
+(defn nbt-as-byte-arrays
+  "Given a root NamedBinaryTag, creates a byte array in the NBT format. Root must be a compound tag."
+  [nbt]
+  (let [length (collect-pre-named-output nbt [])
+        ]
+    nil)
+  )
 
 (defn traverse
   "Traverses the given NBT, executing traversal-fn for side effects at each node. Returns nil"
