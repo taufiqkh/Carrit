@@ -20,7 +20,8 @@
 (def ^:const ^{:doc "Compound tag, which is a sequential list of uniquely named tags."} type-compound 10)
 (def ^:const ^{:doc "Length-prefixed array of signed, 4 byte integers"} type-int-array 11)
 
-(def type-lengths (hash-map type-end 1
+(def ^:const ^{:doc "Lengths for all fixed-length types"}
+               type-lengths (hash-map type-end 1
                    type-byte 1
                    type-short short-length
                    type-int int-length
@@ -98,6 +99,9 @@ extract and the length, in bytes, of the section that was read."
   [^bytes chunk-bytes idx]
   (:data (extract-nbt-from-byte-array chunk-bytes idx)))
 
+; extract-from-byte-array(tag-type chunk-bytes idx)
+; Creates an extract of the given tag type from the chunk-bytes byte array,
+; starting from index idx.
 (defmethod extract-from-byte-array type-byte [tag-type ^bytes chunk-bytes idx]
   (Extract. (make-named-binary-tag tag-type (aget chunk-bytes idx) nil) 1))
 
@@ -147,9 +151,17 @@ extract and the length, in bytes, of the section that was read."
   (let [type-length (get type-lengths (int tag-type))]
     (Extract. (make-named-binary-tag tag-type (num-from-byte-array chunk-bytes idx type-length)) type-length)))
 
-(defn collect-pre-output [nbt output]
+(defn collect-pre-output
+  "Collects the lengths of the given nbt and its children"
+  [nbt output]
   (let [type (:type nbt)]
-    nil))
+    (if (contains? type-lengths type)
+      (type-lengths type)
+      (case type
+              type-list (* (type-lengths (:child-type nbt)) (count (:data nbt)))
+              type-int-array (* int-length (alength ^ints (:data nbt)))
+              type-byte-array (alength ^bytes (:data nbt))
+        (mapcat collect-pre-output (:data nbt))))))
 
 (defn collect-pre-named-output [nbt output]
   (let [type (:type nbt)
@@ -163,15 +175,14 @@ extract and the length, in bytes, of the section that was read."
   [nbt]
   (let [length (collect-pre-named-output nbt [])
         ]
-    nil)
-  )
+    nil))
 
-(defn traverse
+(defn traverse!
   "Traverses the given NBT, executing traversal-fn for side effects at each node. Returns nil"
   [nbt traversal-fn]
   (traversal-fn nbt)
   (if (contains? #{type-byte-array type-list type-int-array} (:type nbt))
-    (dorun (map #(traverse % traversal-fn) (:data nbt)))
+    (dorun (map #(traverse! % traversal-fn) (:data nbt)))
     (if (= type-compound (:type nbt))
-      (dorun (map #(traverse % traversal-fn) (:data (vals nbt))))
+      (dorun (map #(traverse! % traversal-fn) (:data (vals nbt))))
       nil)))

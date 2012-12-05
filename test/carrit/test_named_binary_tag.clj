@@ -61,27 +61,28 @@
 (deftest test-read-list-extract
   "Read a list from a byte array"
   (let [length 2
-        ^bytes chunk-bytes (byte-array (map unchecked-byte [type-compound
-                                                            0 0 0 length
-                                                            type-byte
-                                                            0 4 ; length of byte name
-                                                            116 101 115 116 ; "test"
-                                                            1 ; byte data
-                                                            type-string
-                                                            0 1 ; length of name
-                                                            97 ; "a"
-                                                            0 9 ; length of string data
-                                                            0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
-                                                            type-end
-                                                            type-int
-                                                            0 5 ; length of int name
-                                                            116 101 115 116 50 ; "test2"
-                                                            0 0 0 2 ; int data
-                                                            type-long
-                                                            0 5 ; length of long name
-                                                            116 101 115 116 51 ; "test3"
-                                                            1 2 3 4 5 6 7 8 ; 72623859790382856L
-                                                            type-end]))
+        data [type-compound
+              0 0 0 length
+              type-byte
+              0 4 ; length of byte name
+              116 101 115 116 ; "test"
+              1 ; byte data
+              type-string
+              0 1 ; length of name
+              97 ; "a"
+              0 9 ; length of string data
+              0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
+              type-end
+              type-int
+              0 5 ; length of int name
+              116 101 115 116 50 ; "test2"
+              0 0 0 2 ; int data
+              type-long
+              0 5 ; length of long name
+              116 101 115 116 51 ; "test3"
+              1 2 3 4 5 6 7 8 ; 72623859790382856L
+              type-end]
+        ^bytes chunk-bytes (byte-array (map unchecked-byte data))
         extract (extract-from-byte-array type-list chunk-bytes 0)
         nbt (:data extract)
         nbt-data (:data nbt)]
@@ -108,9 +109,10 @@
 (deftest test-read-int-array-extract
   "Read an IntArray extract from a byte array"
   (let [length 2
-        ^bytes chunk-bytes (byte-array (map byte [0 0 0 length
-                                                  0 0 0 2
-                                                  0 0 0 1])) ; 4 initial bytes for array length
+        data [0 0 0 length
+              0 0 0 2
+              0 0 0 1]
+        ^bytes chunk-bytes (byte-array (map byte data)) ; 4 initial bytes for array length
         extract (extract-from-byte-array type-int-array ^bytes chunk-bytes 0)]
     (is (= (+ int-length (* int-length length)) (:length extract)))
     (let [nbt (:data extract)
@@ -121,15 +123,16 @@
 
 (deftest test-read-compound-extract-nbt
   "Read a compound extract from a byte array"
-  (let [^bytes chunk-bytes (byte-array (map unchecked-byte [type-compound
-                                                            0 4 ; length of name
-                                                            116 101 115 116 ; "test"
-                                                            type-string
-                                                            0 1 ; length of name
-                                                            97 ; "a"
-                                                            0 9 ; length of string data
-                                                            0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
-                                                            type-end]))
+  (let [data [type-compound
+              0 4 ; length of name
+              116 101 115 116 ; "test"
+              type-string
+              0 1 ; length of name
+              97 ; "a"
+              0 9 ; length of string data
+              0x73 0x68 0x6F 0x72 0x74 0x54 0x65 0x73 0x74 ; "shortTest"
+              type-end]
+        ^bytes chunk-bytes (byte-array (map unchecked-byte data))
         extract (extract-nbt-from-byte-array chunk-bytes 0)
         compound-nbt (:data extract)
         children (:data compound-nbt)]

@@ -1,6 +1,7 @@
 (ns carrit.test-region-file
   (:use clojure.test
-        carrit.region-file)
+        carrit.region-file
+        [clojure.set :only (subset?)])
   (:import java.util.Arrays
            java.io.File))
 
@@ -56,7 +57,7 @@
     (let [save-files (:save-files files)
           region-files (:region-files files)]
       (is (not (nil? save-files)))
-      (is (= #{"data" "level.dat" "region"} (set (keys save-files))))
+      (is (subset? #{"data" "level.dat" "region"} (set (keys save-files))))
       (is (not (nil? region-files)))
       (is (empty? (drop-while #(contains? #{"r.0.0.mca", "r.-1.-1.mca", "r.-1.0.mca", "r.0.-1.mca"} %) (keys region-files)))))))
 

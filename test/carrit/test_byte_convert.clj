@@ -33,7 +33,7 @@
 
 (deftest test-short-as-byte-array
   (verify-array [0x01 0xF7] (short-as-byte-array 503))
-  (verify-array [0xF1 0x01] (short-as-byte-array -3893)))
+  (verify-array [0xF0 0xCB] (short-as-byte-array -3893)))
 
 (deftest test-int-from-byte-array
   (let [test-array (byte-arr[0xF1 0x01 0xE7 0x03 0x04])]
